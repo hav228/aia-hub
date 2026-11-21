@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#4E2A12">
+  <meta name="robots" content="noindex">
+  <title>AIA Check-in</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="checkin-page">
+  <header class="ci-head"><span class="logo">AIA</span><div><div class="ci-title">Sunday Night Check-in</div><div id="ci-date" class="ci-date"></div></div></header>
+  <main class="ci-main">
+    <div id="ci-msg" class="card" hidden></div>
+    <form id="ci-form" class="card form" hidden novalidate>
+      <p class="muted small" id="ci-returning" hidden>Welcome back! Check your info and tap <strong>Check in</strong>.</p>
+      <div class="row2">
+        <label class="field"><span class="field-label">First name *</span><input name="firstName" autocomplete="given-name" required maxlength="40"></label>
+        <label class="field"><span class="field-label">Last name *</span><input name="lastName" autocomplete="family-name" required maxlength="40"></label>
+      </div>
+      <label class="field"><span class="field-label">Class year *</span>
+        <select name="classYear" required>
+          <option value="">Choose…</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option><option>Grad</option>
+        </select></label>
+      <label class="field"><span class="field-label">Sport *</span>
+        <select name="teamId" required><option value="">Loading teams…</option></select></label>
+      <label class="field" id="other-wrap" hidden><span class="field-label">Which sport? *</span><input name="teamOther" maxlength="50"></label>
+      <div id="new-fields">
+        <p class="muted small">First time here? Leave your number so we can stay in touch (optional — only AIA leaders and staff can see it).</p>
+        <div class="row2">
+          <label class="field"><span class="field-label">Phone (optional)</span><input name="phone" type="tel" autocomplete="tel" maxlength="25"></label>
+          <label class="field"><span class="field-label">Email (optional)</span><input name="email" type="email" autocomplete="email" maxlength="90"></label>
+        </div>
+      </div>
+      <p id="ci-error" class="warn" hidden></p>
+      <button class="btn primary big full" type="submit">Check in</button>
+      <p class="muted small center">Your info is saved on this phone so next week is one tap.</p>
+    </form>
+  </main>
+  <script type="module" src="js/checkin.js"></script>
+</body>
+</html>
