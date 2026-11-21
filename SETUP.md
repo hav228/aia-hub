@@ -38,7 +38,6 @@ These rules let approved leaders and staff do everything in their own ministry (
 1. Left menu: **Security → Authentication → Get started** (older layouts: Build → Authentication).
 2. **Sign-in method** tab → **Google** → turn on **Enable** → pick your email as the support email → **Save**.
 3. **Settings** tab → **Authorized domains** → **Add domain** → type `hav228.github.io` → **Add**.
-4. Back on **Sign-in method** → **Add new provider** → **Email/Password** → turn on **Email link (passwordless sign-in)** → **Save**. This is the backup sign-in for iPhones and in-app browsers where Google sign-in fails.
 
 ---
 

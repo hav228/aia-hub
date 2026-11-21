@@ -1,7 +1,6 @@
 // The ONLY file that talks to Firebase. Everything else uses these small helpers.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, onAuthStateChanged,
-  sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink }
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot,
@@ -54,27 +53,6 @@ export async function signIn() {
   auth = auth || getAuth(app);
   const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' });
   await signInWithPopup(auth, p);
-}
-// ---- email-link sign-in (works in every browser, including in-app browsers and iPhones
-// that block the Google popup's cross-site storage) ----
-const LINK_EMAIL = 'hub-signin-email';
-export async function sendEmailLink(email) {
-  auth = auth || getAuth(app);
-  const url = location.href.split('#')[0].split('?')[0];
-  await sendSignInLinkToEmail(auth, email, { url, handleCodeInApp: true });
-  try { localStorage.setItem(LINK_EMAIL, email); } catch { /* ignore */ }
-}
-/** If this page was opened from a sign-in email: returns 'done', 'need-email', or null. */
-export async function finishEmailLink(emailIfAsked) {
-  auth = auth || getAuth(app);
-  if (!isSignInWithEmailLink(auth, location.href)) return null;
-  let email = emailIfAsked;
-  try { email = email || localStorage.getItem(LINK_EMAIL); } catch { /* ignore */ }
-  if (!email) return 'need-email';
-  await signInWithEmailLink(auth, email, location.href);
-  try { localStorage.removeItem(LINK_EMAIL); } catch { /* ignore */ }
-  history.replaceState(null, '', location.pathname);
-  return 'done';
 }
 export function signOut() { return fbSignOut(auth || getAuth(app)); }
 

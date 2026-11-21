@@ -81,63 +81,23 @@ document.addEventListener('focusout', () => setTimeout(() => pendingRender && !i
 window.addEventListener('hashchange', () => render(true));
 onChange(scheduleRender);
 
-const inAppBrowser = /Instagram|FBAN|FBAV|GSA\/|GroupMe|Line\/|Snapchat|LinkedInApp|Twitter|MicroMessenger/i.test(navigator.userAgent);
-
 function loginScreen(msg) {
-  const email = h('input', { type: 'email', placeholder: 'you@lehigh.edu', autocomplete: 'email', 'aria-label': 'Email' });
-  const linkBox = h('div', { class: 'link-signin' },
-    h('p', { class: 'small' }, 'Or get a one-tap sign-in link by email — works on any phone or browser:'),
-    email,
-    h('button', { class: 'btn big full', onclick: async e => {
-      const v = email.value.trim().toLowerCase();
-      if (!/^\S+@\S+\.\S+$/.test(v)) { toast('Type your email first', 'err'); return; }
-      e.target.disabled = true;
-      try {
-        await fb.sendEmailLink(v);
-        linkBox.replaceChildren(h('p', { class: 'good-note' }, `Check ${v} for an email from “noreply@cru-aia-lehigh.firebaseapp.com” and tap the link on this device. (Check spam/junk if you don’t see it in a minute.)`));
-      } catch (err) { console.error(err); toast(err.code === 'auth/operation-not-allowed' ? 'Email links aren’t turned on yet — ask Harrison.' : err.message, 'err'); e.target.disabled = false; }
-    } }, 'Email me a sign-in link'));
   root.replaceChildren(h('div', { class: 'login' },
     h('div', { class: 'logo big' }, 'AIA · Cru'),
     h('h1', null, 'Lehigh Leaders Hub'),
+    h('p', null, 'Sign in with the Google account a leader added for you (your Lehigh email works).'),
     msg ? h('p', { class: 'warn' }, msg) : null,
-    inAppBrowser ? h('p', { class: 'warn small' }, 'You’re in an app’s built-in browser, where Google sign-in often fails. Use the email link below, or open this page in Safari/Chrome (••• menu → Open in browser).') : null,
-    h('button', { class: 'btn primary big full', onclick: async () => {
-      try { await fb.signIn(); }
-      catch (e) {
-        if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
-        console.error(e); toast('Google sign-in didn’t work here — try the email link below.', 'err');
-      }
+    h('button', { class: 'btn primary big', onclick: async () => {
+      try { await fb.signIn(); } catch (e) { if (e.code !== 'auth/popup-closed-by-user') toast(e.message, 'err'); }
     } }, 'Sign in with Google'),
-    linkBox,
     h('p', { class: 'muted small' }, 'Attendees don’t need to sign in — they just scan the weekly QR code.')));
-}
-
-let confirmingLink = false;
-async function handleEmailLink() {
-  try {
-    const r = await fb.finishEmailLink();
-    if (r !== 'need-email') return;
-    confirmingLink = true;
-    // Link opened on a different browser/phone than the one that asked for it: confirm the email.
-    const email = h('input', { type: 'email', placeholder: 'you@lehigh.edu', 'aria-label': 'Email' });
-    root.replaceChildren(h('div', { class: 'login' }, h('h1', null, 'Confirm your email'),
-      h('p', null, 'Type the email address the sign-in link was sent to.'), email,
-      h('button', { class: 'btn primary big full', onclick: async () => {
-        try { confirmingLink = false; await fb.finishEmailLink(email.value.trim().toLowerCase()); }
-        catch (e) { console.error(e); toast('That link didn’t work — request a new one.', 'err'); history.replaceState(null, '', location.pathname); loginScreen(); }
-      } }, 'Sign in')));
-  } catch (e) {
-    console.error(e); history.replaceState(null, '', location.pathname);
-    loginScreen('That sign-in link expired or was already used. Request a new one below.');
-  }
 }
 
 if (String(firebaseConfig.apiKey).includes('PASTE')) {
   root.replaceChildren(h('div', { class: 'login' }, h('h1', null, 'Almost there'),
     h('p', null, 'Paste your Firebase config into js/firebase-config.js (see SETUP.md, step 1), then upload it again.')));
-} else { handleEmailLink(); fb.onAuth(async user => {
-  if (!user) { stop(); S.user = S.me = null; if (!confirmingLink) loginScreen(); return; }
+} else fb.onAuth(async user => {
+  if (!user) { stop(); S.user = S.me = null; loginScreen(); return; }
   root.replaceChildren(h('div', { class: 'loading' }, 'Checking access…'));
   let ok = false;
   try { ok = await checkAccess(user); } catch (e) { console.error(e); }
@@ -148,6 +108,6 @@ if (String(firebaseConfig.apiKey).includes('PASTE')) {
   }
   switchOrg(preferredOrg());
   render(true);
-}); }
+});
 
 export { fb };
