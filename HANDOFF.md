@@ -123,7 +123,7 @@ You have two options.
 | Problem | Fix |
 |---|---|
 | "isn't on the leader list" | Add that exact Google email under Settings → Leaders & staff. |
-| Sign-in popup errors | Firebase → Authentication → Settings → Authorized domains must include the site's domain (for example `hav228.github.io`). |
+| Sign-in popup errors, or "missing initial state" on an iPhone | Use **Email me a sign-in link** on the login screen; it works in every browser. (Google sign-in can fail inside apps' built-in browsers and on some iPhones.) Also check Firebase → Authentication → Settings → Authorized domains includes the site's domain, for example `hav228.github.io`. |
 | Check-in says "isn't open right now" | It's outside the Sunday window. Use This Week → More options → Open check-in now. |
 | Stuck on "Loading…" | Hard refresh (Cmd+Shift+R). If that doesn't fix it, check that the GitHub repo still has the `css` and `js` folders. |
 | Firebase "quota exceeded" | Very unlikely at this size. Wait until the next day; usage resets daily. |
