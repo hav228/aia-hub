@@ -10,10 +10,12 @@ export function renderMore() {
   const link = (href, title, sub) => h('a', { class: 'more-link', href }, h('strong', null, title), h('span', { class: 'muted small' }, sub));
   return [h('h1', null, 'More'),
     card(null,
+      link('#/schedules', 'Schedules', 'Everyone’s weekly schedule and “Find a time” for meetings'),
+      link('#/schedules/find', 'Find a time', 'See when a group of leaders and staff are all free'),
       link('#/settings', 'Settings', 'Semesters, teams, leader logins, check-in times, thresholds'),
       link('#/activity', 'Activity log', 'Who changed what, and when'),
       link('#/trash', 'Trash', 'Restore anything deleted in the last 90 days')),
-    card('Coming in later phases', h('p', { class: 'muted' }, 'Schedules · Study plans')),
+    card('Coming in the next phase', h('p', { class: 'muted' }, 'Study plans')),
     card(null, h('p', { class: 'muted small' }, `Signed in as ${S.user.email}`),
       h('button', { class: 'btn', onclick: () => fb.signOut() }, 'Sign out'))];
 }

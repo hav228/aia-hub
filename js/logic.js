@@ -364,3 +364,78 @@ export function latestOutreach(outreach) {
   }
   return m;
 }
+
+// ---------- schedules & availability ----------
+export const DAY_START = 7 * 60, DAY_END = 24 * 60, SLOT = 30;
+export const SLOTS = (DAY_END - DAY_START) / SLOT; // 34
+export const WEEK_DAYS = [1, 2, 3, 4, 5, 6, 0];    // Mon..Sun (JS getDay numbers)
+export const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+export const CATEGORIES = ['Class', 'Practice', 'Lift', 'Game', 'Travel', 'Work', 'Meeting', 'Other'];
+
+export function toMin(hhmm) { if (!hhmm) return null; const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; }
+export function endMin(start, end) { const s = toMin(start), e = toMin(end); return e <= s ? 24 * 60 : e; } // "00:00" end = midnight
+export function fmtMin(min) {
+  const h = Math.floor(min / 60) % 24, m = min % 60, ap = h < 12 ? 'am' : 'pm', h12 = h % 12 || 12;
+  return m ? `${h12}:${String(m).padStart(2, '0')}${ap}` : `${h12}${ap}`;
+}
+export const slotStart = i => DAY_START + i * SLOT;
+
+function markRange(row, s, e, val) {
+  for (let i = 0; i < SLOTS; i++) { const a = slotStart(i), b = a + SLOT; if (a < e && b > s) row[i] = val; }
+}
+
+/** Monday of the week containing k. */
+export function mondayOf(k) { const d = parseKey(k).getDay(); return addDays(k, d === 0 ? -6 : 1 - d); }
+
+/**
+ * Busy grid for one person: {day(0-6): boolean[SLOTS]}.
+ * weekMonday = null → typical week (no one-time changes); otherwise apply that week's exceptions.
+ */
+export function busyGrid(blocks, exceptions, weekMonday) {
+  const g = {}; for (let d = 0; d < 7; d++) g[d] = Array(SLOTS).fill(false);
+  for (const b of blocks || []) for (const d of b.days || []) markRange(g[d], toMin(b.start), endMin(b.start, b.end), true);
+  if (weekMonday) {
+    const live = (exceptions || []).filter(x => !x.deleted);
+    for (let i = 0; i < 7; i++) {
+      const k = addDays(weekMonday, i), d = parseKey(k).getDay();
+      const today = live.filter(x => x.startDate <= k && (x.endDate || x.startDate) >= k);
+      for (const type of ['free', 'busy']) for (const x of today.filter(x => x.type === type)) {
+        if (x.allDay) g[d].fill(type === 'busy'); else markRange(g[d], toMin(x.start), endMin(x.start, x.end), type === 'busy');
+      }
+    }
+  }
+  return g;
+}
+
+/**
+ * people: [{id, name, grid}] → {counts:{day:[n]}, free:{day:[[ids]]}, best:[{day,start,end,free,busy}]}
+ * Best = longest runs where everyone is free (falls back to "all but one"), ≥ minSlots long.
+ */
+export function findTimes(people, { minSlots = 2, prefFrom = 8 * 60, prefTo = 23 * 60, max = 5 } = {}) {
+  const n = people.length, counts = {}, free = {};
+  for (let d = 0; d < 7; d++) {
+    counts[d] = Array(SLOTS).fill(0); free[d] = Array.from({ length: SLOTS }, () => []);
+    for (const p of people) for (let i = 0; i < SLOTS; i++) if (!p.grid[d][i]) { counts[d][i]++; free[d][i].push(p.id); }
+  }
+  const runs = need => {
+    const out = [];
+    for (const d of WEEK_DAYS) {
+      let i = 0;
+      while (i < SLOTS) {
+        if (counts[d][i] >= need && slotStart(i) >= prefFrom && slotStart(i) < prefTo) {
+          let j = i; const startFree = free[d][i].join();
+          while (j < SLOTS && counts[d][j] >= need && slotStart(j) < prefTo && (need === n || free[d][j].join() === startFree)) j++;
+          if (j - i >= minSlots) out.push({ day: d, startSlot: i, endSlot: j, start: slotStart(i), end: slotStart(j), freeIds: free[d][i], busyIds: people.map(p => p.id).filter(id => !free[d][i].includes(id)) });
+          i = j;
+        } else i++;
+      }
+    }
+    // Anything 2+ hours long counts as equally good; then go in week order (Mon first).
+    const score = r => Math.min(r.endSlot - r.startSlot, 4);
+    return out.sort((a, b) => score(b) - score(a) || WEEK_DAYS.indexOf(a.day) - WEEK_DAYS.indexOf(b.day) || (b.endSlot - b.startSlot) - (a.endSlot - a.startSlot) || a.start - b.start);
+  };
+  const onePerDay = rs => { const seen = new Set(); return rs.filter(r => !seen.has(r.day) && seen.add(r.day)); };
+  let best = n ? runs(n) : [], level = 'all';
+  if (!best.length && n > 2) { best = runs(n - 1); level = 'allButOne'; }
+  return { counts, free, best: onePerDay(best).slice(0, max), level, n };
+}

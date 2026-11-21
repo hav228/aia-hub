@@ -10,11 +10,12 @@ import { renderSettings, renderMore } from './pages/settings.js';
 import { renderActivity } from './pages/activity.js';
 import { renderTrash } from './pages/trash.js';
 import { renderOutreach } from './pages/outreach.js';
+import { renderSchedules } from './pages/schedules.js';
 
 const root = document.getElementById('app');
 const routes = {
   week: renderWeek, people: renderPeople, person: renderPerson, review: renderReview,
-  outreach: renderOutreach, reports: renderReports, settings: renderSettings, more: renderMore, activity: renderActivity, trash: renderTrash,
+  outreach: renderOutreach, schedules: renderSchedules, reports: renderReports, settings: renderSettings, more: renderMore, activity: renderActivity, trash: renderTrash,
 };
 const NAV = [
   ['week', 'This Week', '📅'], ['people', 'People', '👥'], ['outreach', 'Outreach', '💬'], ['reports', 'Reports', '📊'], ['review', 'Review', '✅'], ['more', 'More', '☰'],
@@ -29,7 +30,7 @@ export function parseRoute() {
 function shell(content, routeName) {
   const reviewCount = S.review.length;
   const nav = h('nav', { class: 'nav', 'aria-label': 'Main' }, NAV.map(([r, label, icon]) => {
-    const active = r === routeName || (r === 'people' && routeName === 'person') || (r === 'more' && ['settings', 'activity', 'trash'].includes(routeName));
+    const active = r === routeName || (r === 'people' && routeName === 'person') || (r === 'more' && ['settings', 'activity', 'trash', 'schedules'].includes(routeName));
     return h('a', { href: `#/${r}`, class: active ? 'active' : '', 'aria-current': active ? 'page' : null },
       h('span', { class: 'nav-icon', 'aria-hidden': 'true' }, icon), h('span', null, label),
       r === 'review' && reviewCount ? h('span', { class: 'badge', 'aria-label': `${reviewCount} to review` }, reviewCount) : null);

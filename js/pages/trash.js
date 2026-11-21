@@ -1,9 +1,9 @@
 import { h, card, empty, toast, confirmBox } from '../ui.js';
-import { S, restorePerson, purgePerson, personTeam, restoreOutreach, purgeOutreach, userName } from '../store.js';
+import { S, restorePerson, purgePerson, personTeam, restoreOutreach, purgeOutreach, userName, restoreException, purgeException } from '../store.js';
 import { fullName } from '../logic.js';
 
 const DAYS90 = 90 * 24 * 3600 * 1000;
-let purging = false;
+let purging = false, purgingEx = false;
 
 export function renderTrash() {
   const trashed = S.people.filter(p => p.deleted && !p.mergedInto).sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0));
@@ -13,6 +13,9 @@ export function renderTrash() {
   const oldNotes = notes.filter(o => o.deletedAt instanceof Date && Date.now() - o.deletedAt > DAYS90);
   if ((old.length || oldNotes.length) && !purging) { purging = true; Promise.all([...old.map(p => purgePerson(p, true)), ...oldNotes.map(o => purgeOutreach(o))]).finally(() => (purging = false)); }
   const byId = new Map(S.people.map(p => [p.id, p]));
+  const exs = S.exceptions.filter(x => x.deleted);
+  const oldEx = exs.filter(x => x.deletedAt instanceof Date && Date.now() - x.deletedAt > DAYS90);
+  if (oldEx.length && !purgingEx) { purgingEx = true; Promise.all(oldEx.map(purgeException)).finally(() => (purgingEx = false)); }
   return [h('div', { class: 'page-head' }, h('a', { class: 'btn icon', href: '#/more', 'aria-label': 'Back' }, '‹'), h('h1', null, 'Trash')),
     h('p', { class: 'muted small' }, 'Deleted people stay here for 90 days. Restoring brings back everything, including their attendance.'),
     card('People', trashed.length ? h('ul', { class: 'set-list' }, trashed.map(p => {
@@ -34,5 +37,12 @@ export function renderTrash() {
           h('button', { class: 'btn small danger-outline', onclick: async () => {
             if (await confirmBox('Delete forever?', 'This note will be permanently removed.', 'Delete forever', true)) { await purgeOutreach(o); toast('Deleted'); }
           } }, 'Delete forever')));
-    })) : empty('No deleted notes.'))];
+    })) : empty('No deleted notes.')),
+    card('Schedule changes', exs.length ? h('ul', { class: 'set-list' }, exs.map(x => h('li', null,
+      h('div', null, h('strong', null, x.label || x.type), h('div', { class: 'muted small' }, `${userName(x.userEmail)} · ${x.startDate}`)),
+      h('div', { class: 'btn-row tight' },
+        h('button', { class: 'btn small primary', onclick: async () => { await restoreException(x); toast('Restored'); } }, 'Restore'),
+        h('button', { class: 'btn small danger-outline', onclick: async () => {
+          if (await confirmBox('Delete forever?', 'This will be permanently removed.', 'Delete forever', true)) { await purgeException(x); toast('Deleted'); }
+        } }, 'Delete forever'))))) : empty('No deleted schedule changes.'))];
 }

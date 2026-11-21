@@ -10,7 +10,7 @@ import { OWNER_EMAIL } from './firebase-config.js';
 export const S = {
   user: null, me: null,
   settings: { ...DEFAULT_SETTINGS }, semesters: [], teams: [], users: [], people: [], sundays: [],
-  pending: [], review: [], outreach: [],
+  pending: [], review: [], outreach: [], schedules: [], exceptions: [],
   loaded: new Set(), ready: false, index: new Map(),
 };
 const listeners = new Set();
@@ -69,6 +69,8 @@ export function start() {
     S.sundays = d.map(s => ({ ...s, date: s.id, attendees: s.attendees || {} }));
     S.index = attendanceIndex(S.sundays); mark('sundays');
   }));
+  unsubs.push(fb.watch('schedules', {}, d => { S.schedules = d; mark('schedules'); }));
+  unsubs.push(fb.watch('scheduleExceptions', {}, d => { S.exceptions = d; mark('exceptions'); }));
   unsubs.push(fb.watch('outreach', {}, d => { S.outreach = d; mark('outreach'); }));
   unsubs.push(fb.watch('checkins', { where: [['status', 'in', ['pending', 'review']]] }, d => {
     S.pending = d.filter(c => c.status === 'pending');
@@ -300,6 +302,48 @@ export async function purgeOutreach(o) {
   log('purge', 'Permanently deleted an outreach note', { kind: 'outreach', refId: o.id, snapshot: JSON.parse(JSON.stringify(o)) });
 }
 
+// ---------- schedules ----------
+export const scheduleId = (semId, email) => `${semId}__${email}`;
+export const scheduleFor = (semId, email) => S.schedules.find(x => x.id === scheduleId(semId, email));
+export const exceptionsFor = email => S.exceptions.filter(x => x.userEmail === email && !x.deleted);
+export const activeUsers = () => S.users.filter(u => u.active !== false).sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+const blockText = b => `${b.label || b.category} (${b.days.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join('/')} ${b.start}–${b.end})`;
+
+export async function saveBlock(semId, email, block, isNew) {
+  const cur = scheduleFor(semId, email)?.blocks || [];
+  const blocks = isNew ? [...cur, block] : cur.map(b => b.id === block.id ? block : b);
+  await fb.setOne(`schedules/${scheduleId(semId, email)}`, { semesterId: semId, userEmail: email, blocks, updatedAt: NOW, updatedBy: S.user.email }, true);
+  log(isNew ? 'schedule' : 'edit', `${isNew ? 'Added' : 'Edited'} ${blockText(block)} on ${userName(email)}'s schedule`, { kind: 'schedule', refId: scheduleId(semId, email) });
+}
+export async function deleteBlock(semId, email, block) {
+  const blocks = (scheduleFor(semId, email)?.blocks || []).filter(b => b.id !== block.id);
+  await fb.setOne(`schedules/${scheduleId(semId, email)}`, { blocks, updatedAt: NOW, updatedBy: S.user.email }, true);
+  log('delete', `Removed ${blockText(block)} from ${userName(email)}'s schedule`, { kind: 'schedule', refId: scheduleId(semId, email), snapshot: block });
+}
+export async function copySchedule(fromSemId, toSemId, email) {
+  const src = scheduleFor(fromSemId, email)?.blocks || [];
+  const cur = scheduleFor(toSemId, email)?.blocks || [];
+  const blocks = [...cur, ...src.map(b => ({ ...b, id: fb.newId('x') }))];
+  await fb.setOne(`schedules/${scheduleId(toSemId, email)}`, { semesterId: toSemId, userEmail: email, blocks, updatedAt: NOW, updatedBy: S.user.email }, true);
+  log('schedule', `Copied ${src.length} items into ${userName(email)}'s schedule from another semester`, { kind: 'schedule', refId: scheduleId(toSemId, email) });
+}
+export async function saveException(x, d) {
+  if (x) { await fb.updateOne(`scheduleExceptions/${x.id}`, { ...d, updatedAt: NOW, updatedBy: S.user.email }); log('edit', `Edited one-time change "${d.label}" for ${userName(x.userEmail)}`, { kind: 'exception', refId: x.id, changes: diff(x, d) }); }
+  else { const id = await fb.addOne('scheduleExceptions', { ...d, deleted: false, createdAt: NOW, createdBy: S.user.email }); log('schedule', `Added one-time change "${d.label}" for ${userName(d.userEmail)}`, { kind: 'exception', refId: id }); }
+}
+export async function trashException(x) {
+  await fb.updateOne(`scheduleExceptions/${x.id}`, { deleted: true, deletedAt: NOW, deletedBy: S.user.email });
+  log('delete', `Deleted one-time change "${x.label}" for ${userName(x.userEmail)}`, { kind: 'exception', refId: x.id });
+}
+export async function restoreException(x) {
+  await fb.updateOne(`scheduleExceptions/${x.id}`, { deleted: false, deletedAt: DELETE, deletedBy: DELETE });
+  log('restore', `Restored one-time change "${x.label}"`, { kind: 'exception', refId: x.id });
+}
+export async function purgeException(x) {
+  await fb.removeOne(`scheduleExceptions/${x.id}`);
+  log('purge', `Permanently deleted one-time change "${x.label}"`, { kind: 'exception', refId: x.id, snapshot: JSON.parse(JSON.stringify(x)) });
+}
+
 // ---------- attendance ----------
 export async function addAttendance(k, p) {
   await fb.updateOne(`sundays/${k}`, { [`attendees.${p.id}`]: { teamId: p.teamId || '', teamOther: p.teamOther || '', classYear: p.classYear || '', source: 'manual', addedBy: S.user.email, at: NOW } });
@@ -373,7 +417,7 @@ export async function removeUser(u) {
 
 // ---------- backup ----------
 export async function fullBackup() {
-  const colls = ['settings', 'semesters', 'teams', 'users', 'people', 'sundays', 'checkins', 'activity', 'outreach'];
+  const colls = ['settings', 'semesters', 'teams', 'users', 'people', 'sundays', 'checkins', 'activity', 'outreach', 'schedules', 'scheduleExceptions'];
   const data = { exportedAt: new Date().toISOString(), exportedBy: S.user.email };
   for (const c of colls) data[c] = await fb.getMany(c).catch(() => []);
   log('backup', 'Downloaded a full backup');
