@@ -1,12 +1,13 @@
 import { h, card, empty, fmtDate, toast, confirmBox, modal, select, field, go } from '../ui.js';
-import { S, visiblePeople, personTeam, updatePerson, setArchived, trashPerson, mergePeople, removeAttendance } from '../store.js';
-import { CLASS_YEARS, fullName, normalizeName, findPossibleDuplicates } from '../logic.js';
-import { personForm, addPersonModal, pickPerson, teamOptions } from './common.js';
+import { S, visiblePeople, personTeam, updatePerson, setArchived, trashPerson, mergePeople, removeAttendance, groups, setGroupOverride, userName, setFollowUpDone, trashOutreach, todayKey } from '../store.js';
+import { CLASS_YEARS, fullName, normalizeName, findPossibleDuplicates, GROUPS, groupLabel } from '../logic.js';
+import { personForm, addPersonModal, pickPerson, teamOptions, outreachModal } from './common.js';
 
 const view = { q: '', team: '', year: '', show: 'active' };
 
 export function renderPeople() {
   const all = visiblePeople();
+  const G = groups();
   const search = h('input', { type: 'search', placeholder: 'Search names…', value: view.q, 'aria-label': 'Search people' });
   const list = h('div', { class: 'people-list' });
   const countEl = h('span', { class: 'muted' });
@@ -21,8 +22,7 @@ export function renderPeople() {
     list.replaceChildren(...(rows.length ? rows.map(p => {
       const dates = S.index.get(p.id) || [];
       return h('a', { class: 'person-row', href: `#/person/${p.id}` },
-        h('div', null, h('strong', null, fullName(p)), p.archived ? h('span', { class: 'tag' }, p.archivedReason || 'Archived') : null,
-          !dates.length ? h('span', { class: 'tag potential' }, 'Never attended') : null),
+        h('div', null, h('strong', null, fullName(p)), G.get(p.id) ? h('span', { class: `tag g-${G.get(p.id).group}` }, groupLabel(G.get(p.id).group)) : null),
         h('div', { class: 'muted small' }, `${personTeam(p)} · ${p.classYear || '—'} · ${dates.length} week${dates.length === 1 ? '' : 's'}${dates.length ? ` · last ${fmtDate(dates[dates.length - 1], { month: 'short', day: 'numeric' })}` : ''}`));
     }) : [empty('No one matches.')]));
   };
@@ -84,15 +84,13 @@ export function renderPerson(id) {
   return [
     h('div', { class: 'page-head' }, h('a', { class: 'btn icon', href: '#/people', 'aria-label': 'Back' }, '‹'),
       h('h1', null, fullName(p)), p.deleted ? h('span', { class: 'tag' }, 'In Trash') : p.archived ? h('span', { class: 'tag' }, p.archivedReason || 'Archived') : null),
-    h('div', { class: 'grid2' },
+    h('div', { class: 'grid2 person-grid' },
       card('Details', form.el, h('div', { class: 'btn-row' }, save),
         (p.aliases || []).length ? h('p', { class: 'muted small' }, `Also matches: ${p.aliases.join(', ')}`) : null),
       h('div', null,
+        outreachCard(p),
         card(`Attendance (${dates.length} week${dates.length === 1 ? '' : 's'})`,
-          dates.length ? h('ul', { class: 'date-list' }, dates.map(k => h('li', null, h('a', { href: `#/week/${k}` }, fmtDate(k, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })),
-            h('button', { class: 'icon-btn', 'aria-label': `Remove attendance on ${k}`, onclick: async () => {
-              if (await confirmBox('Remove attendance?', `Remove ${fullName(p)} from ${fmtDate(k)}?`, 'Remove', true)) await removeAttendance(k, p);
-            } }, '×')))) : empty('Hasn’t attended yet.')),
+          dates.length ? dateList(p, dates) : empty('Hasn’t attended yet.')),
         card('Actions', h('div', { class: 'btn-col' },
           h('button', { class: 'btn', onclick: () => pickPerson({ title: `Merge ${fullName(p)} with…`, exclude: new Set([p.id]), allowNew: false, onPick: other => mergeFlow(p, other) }) }, 'Merge with a duplicate…'),
           p.archived
@@ -113,4 +111,37 @@ function archiveModal(p) {
     { label: 'Cancel' },
     { label: 'Archive', kind: 'primary', onClick: async () => { await setArchived(p, true, reason.value); toast('Archived'); } },
   ]);
+}
+
+function outreachCard(p) {
+  const g = groups().get(p.id);
+  const logs = S.outreach.filter(o => o.personId === p.id && !o.deleted).sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : (b.createdAt || 0) - (a.createdAt || 0));
+  const today = todayKey();
+  const groupSel = select([['', `Automatic (${groupLabel(g?.auto || 'potential')})`], ...GROUPS.filter(([k]) => k !== 'inactive').map(([k, l]) => [k, `${l} (manual)`])], g?.manual ? p.groupOverride : '', { 'aria-label': 'Group' });
+  groupSel.onchange = async () => { await setGroupOverride(p, groupSel.value); toast('Group updated'); };
+  return card('Outreach',
+    g ? h('div', { class: 'group-line' }, h('span', { class: `tag big g-${g.group}` }, groupLabel(g.group)), h('span', { class: 'muted small' }, g.manual ? ' Set manually' : ` ${g.reason}`)) : null,
+    p.archived ? h('p', { class: 'muted small' }, 'Archived people stay in Inactive / graduated. Move them back to active to change the group.')
+      : field('Group', groupSel, 'Leave on Automatic unless you have a reason. Manual stays until you change it back.'),
+    h('div', { class: 'btn-row' }, h('button', { class: 'btn primary', onclick: () => outreachModal(p) }, '+ Log outreach')),
+    logs.length ? h('ul', { class: 'log-list' }, logs.map(o => h('li', null,
+      h('div', { class: 'log-head' }, h('strong', null, `${o.method}`), h('span', { class: 'muted small' }, ` · ${userName(o.by)} · ${fmtDate(o.date, { month: 'short', day: 'numeric', year: 'numeric' })}`)),
+      o.notes ? h('div', { class: 'log-notes' }, o.notes) : null,
+      o.nextFollowUp ? h('div', { class: 'small' }, o.followUpDone ? h('span', { class: 'muted' }, `Follow-up ${fmtDate(o.nextFollowUp)} ✓ done`)
+        : h('span', { class: o.nextFollowUp < today ? 'due overdue' : 'due' }, `Follow up by ${fmtDate(o.nextFollowUp)}`),
+        o.followUpDone ? null : h('button', { class: 'linkish', onclick: () => setFollowUpDone(o, true, p) }, 'mark done')) : null,
+      h('div', { class: 'log-actions' },
+        h('button', { class: 'linkish', onclick: () => outreachModal(p, o) }, 'Edit'),
+        h('button', { class: 'linkish danger', onclick: async () => {
+          if (await confirmBox('Delete this note?', 'It goes to Trash and can be restored for 90 days.', 'Delete', true)) { await trashOutreach(o, p); toast('Moved to Trash'); }
+        } }, 'Delete'))))) : empty('No outreach logged yet.'));
+}
+
+function dateList(p, dates) {
+  const item = k => h('li', null, h('a', { href: `#/week/${k}` }, fmtDate(k, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })),
+    h('button', { class: 'icon-btn', 'aria-label': `Remove attendance on ${k}`, onclick: async () => {
+      if (await confirmBox('Remove attendance?', `Remove ${fullName(p)} from ${fmtDate(k)}?`, 'Remove', true)) await removeAttendance(k, p);
+    } }, '×'));
+  return [h('ul', { class: 'date-list' }, dates.slice(0, 6).map(item)),
+    dates.length > 6 ? h('details', null, h('summary', { class: 'small' }, `Show all ${dates.length}`), h('ul', { class: 'date-list' }, dates.slice(6).map(item))) : null];
 }

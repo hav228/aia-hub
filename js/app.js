@@ -9,14 +9,15 @@ import { renderReports } from './pages/reports.js';
 import { renderSettings, renderMore } from './pages/settings.js';
 import { renderActivity } from './pages/activity.js';
 import { renderTrash } from './pages/trash.js';
+import { renderOutreach } from './pages/outreach.js';
 
 const root = document.getElementById('app');
 const routes = {
   week: renderWeek, people: renderPeople, person: renderPerson, review: renderReview,
-  reports: renderReports, settings: renderSettings, more: renderMore, activity: renderActivity, trash: renderTrash,
+  outreach: renderOutreach, reports: renderReports, settings: renderSettings, more: renderMore, activity: renderActivity, trash: renderTrash,
 };
 const NAV = [
-  ['week', 'This Week', '📅'], ['people', 'People', '👥'], ['reports', 'Reports', '📊'], ['review', 'Review', '✅'], ['more', 'More', '☰'],
+  ['week', 'This Week', '📅'], ['people', 'People', '👥'], ['outreach', 'Outreach', '💬'], ['reports', 'Reports', '📊'], ['review', 'Review', '✅'], ['more', 'More', '☰'],
 ];
 
 export function parseRoute() {

@@ -1,3 +1,5 @@
+import { OUTREACH_METHODS, addDays as _addDays, dateKey as _dateKey } from '../logic.js';
+import { logOutreach, updateOutreach, todayKey as _todayKey } from '../store.js';
 import { h, field, select, modal, toast } from '../ui.js';
 import { S, visiblePeople, personTeam, addPerson } from '../store.js';
 import { CLASS_YEARS, fullName, normalizeName } from '../logic.js';
@@ -82,4 +84,36 @@ export function teamBars(rows, max) {
     h('span', { class: 'mini-label' }, r.name),
     h('span', { class: 'mini-track' }, h('span', { class: 'mini-fill', style: `width:${Math.max(4, r.checkins / m * 100)}%` })),
     h('span', { class: 'mini-num' }, r.checkins))));
+}
+
+// ---------- outreach ----------
+
+/** Log (or edit) an outreach note for person p. */
+export function outreachModal(p, existing) {
+  const today = _todayKey();
+  const users = [...S.users].filter(u => u.active !== false || u.email === existing?.by).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const me = S.user.email;
+  const byOpts = users.map(u => [u.email, u.name || u.email]);
+  if (!byOpts.some(o => o[0] === (existing?.by || me))) byOpts.unshift([existing?.by || me, existing?.by || S.user.name || me]);
+  const by = select(byOpts, existing?.by || me);
+  const date = h('input', { type: 'date', value: existing?.date || today, max: _addDays(today, 1) });
+  const method = select(OUTREACH_METHODS, existing?.method || 'Text');
+  const notes = h('textarea', { rows: 4, placeholder: 'How are they doing? Prayer requests, what you talked about, next step…' }, existing?.notes || '');
+  const fu = h('input', { type: 'date', value: existing?.nextFollowUp || '' });
+  const quick = (label, days) => h('button', { class: 'btn small', type: 'button', onclick: () => (fu.value = days == null ? '' : _addDays(today, days)) }, label);
+  modal(existing ? 'Edit outreach' : `Reach out to ${fullName(p)}`, h('div', { class: 'form' },
+    h('div', { class: 'row2' }, field('Who reached out', by), field('Date', date)),
+    field('How', method),
+    field('Notes (private)', notes),
+    field('Next follow-up', fu),
+    h('div', { class: 'btn-row tight wrap' }, quick('In 3 days', 3), quick('In 1 week', 7), quick('In 2 weeks', 14), quick('None', null)),
+    existing ? null : h('p', { class: 'muted small' }, 'Saving this marks any earlier open follow-ups for this person as done.')), [
+    { label: 'Cancel' },
+    { label: 'Save', kind: 'primary', onClick: async () => {
+      if (!date.value) { toast('Pick a date', 'err'); return false; }
+      const d = { by: by.value, date: date.value, method: method.value, notes: notes.value, nextFollowUp: fu.value };
+      if (existing) await updateOutreach(existing, d, p); else await logOutreach(p, d);
+      toast('Saved');
+    } },
+  ]);
 }

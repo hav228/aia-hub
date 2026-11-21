@@ -293,3 +293,74 @@ export function toCSV(rows) {
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   }).join(',')).join('\n');
 }
+
+// ---------- outreach groups ----------
+export const GROUPS = [
+  ['new', 'New', 'First came recently'],
+  ['regular', 'Regular', 'Coming consistently'],
+  ['occasional', 'Occasional', 'Comes sometimes — not regular, not cold'],
+  ['cold', 'Cold', 'Has missed several weeks in a row'],
+  ['potential', 'Potential', 'Never attended yet'],
+  ['inactive', 'Inactive / graduated', 'Archived — history kept'],
+];
+export const GROUP_KEYS = GROUPS.map(g => g[0]);
+export const groupLabel = k => (GROUPS.find(g => g[0] === k) || [, k])[1];
+export const OUTREACH_METHODS = ['Text', 'Call', 'Coffee / meal', 'In person', 'Social media', 'Email', 'Other'];
+
+/** Studies that "count" for groups: past ones, plus today's if anyone has checked in yet. */
+export function countedStudies(sundays, todayKey) {
+  return sundays.filter(s => s.status !== 'nostudy' &&
+    (s.date < todayKey || (s.date === todayKey && Object.keys(s.attendees || {}).length)))
+    .map(s => s.date).sort();
+}
+
+/**
+ * Work out each person's outreach group.
+ * returns Map pid -> {group, auto, manual:boolean, reason, recent, window, lastAttended, firstAttended}
+ */
+export function computeGroups({ people, sundays, settings, todayKey, index }) {
+  const st = { ...DEFAULT_SETTINGS, ...settings };
+  const held = countedStudies(sundays, todayKey);
+  const idx = index || attendanceIndex(sundays);
+  const regN = Math.max(1, Number(st.regularWindowWeeks) || 8), newN = Math.max(1, Number(st.newWindowWeeks) || 4);
+  const coldN = Math.max(1, Number(st.coldMissedWeeks) || 4), pct = Number(st.regularPct) || 50;
+  const regWin = held.slice(-regN), newWin = held.slice(-newN), coldWin = held.slice(-coldN);
+  const out = new Map();
+  for (const p of activePeople(people)) {
+    const dates = (idx.get(p.id) || []).filter(d => d <= todayKey);
+    const set = new Set(dates);
+    const recent = regWin.filter(d => set.has(d)).length;
+    let auto, reason;
+    if (p.archived) { auto = 'inactive'; reason = p.archivedReason || 'Archived'; }
+    else if (!dates.length) { auto = 'potential'; reason = 'Hasn’t attended yet'; }
+    else if (newWin.length && dates[0] >= newWin[0]) { auto = 'new'; reason = `First came within the last ${newN} studies`; }
+    else if (held.length >= coldN && !coldWin.some(d => set.has(d))) { auto = 'cold'; reason = `Missed the last ${coldN}+ studies in a row`; }
+    else if (regWin.length && recent / regWin.length * 100 >= pct) { auto = 'regular'; reason = `Came to ${recent} of the last ${regWin.length} studies`; }
+    else { auto = 'occasional'; reason = `Came to ${recent} of the last ${regWin.length} studies`; }
+    const manual = !p.archived && GROUP_KEYS.includes(p.groupOverride) && p.groupOverride !== 'inactive';
+    out.set(p.id, { group: manual ? p.groupOverride : auto, auto, manual, reason, recent, window: regWin.length,
+      lastAttended: dates[dates.length - 1] || '', firstAttended: dates[0] || '' });
+  }
+  return out;
+}
+
+/** Sunday that ends "this week" (today if it's Sunday). */
+export function weekEndKey(todayKey) { const d = parseKey(todayKey); return addDays(todayKey, (7 - d.getDay()) % 7); }
+
+/** Open follow-ups due by the end of this week (including overdue). */
+export function followUpsDue(outreach, todayKey) {
+  const end = weekEndKey(todayKey);
+  return outreach.filter(o => !o.deleted && o.nextFollowUp && !o.followUpDone && o.nextFollowUp <= end)
+    .sort((a, b) => a.nextFollowUp < b.nextFollowUp ? -1 : a.nextFollowUp > b.nextFollowUp ? 1 : 0);
+}
+
+/** Latest outreach per person. */
+export function latestOutreach(outreach) {
+  const m = new Map();
+  for (const o of outreach) {
+    if (o.deleted) continue;
+    const cur = m.get(o.personId);
+    if (!cur || o.date > cur.date || (o.date === cur.date && (o.createdAt || 0) > (cur.createdAt || 0))) m.set(o.personId, o);
+  }
+  return m;
+}

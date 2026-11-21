@@ -13,7 +13,7 @@ export function renderMore() {
       link('#/settings', 'Settings', 'Semesters, teams, leader logins, check-in times, thresholds'),
       link('#/activity', 'Activity log', 'Who changed what, and when'),
       link('#/trash', 'Trash', 'Restore anything deleted in the last 90 days')),
-    card('Coming in later phases', h('p', { class: 'muted' }, 'Outreach · Schedules · Study plans')),
+    card('Coming in later phases', h('p', { class: 'muted' }, 'Schedules · Study plans')),
     card(null, h('p', { class: 'muted small' }, `Signed in as ${S.user.email}`),
       h('button', { class: 'btn', onclick: () => fb.signOut() }, 'Sign out'))];
 }
@@ -121,10 +121,11 @@ function thresholdsCard() {
     h('h3', null, 'Reports'),
     line('Flag weeks more than ', inputs.inconsistentPct, '% above or below the average as “inconsistent”.'),
     line('“Attendance dropping” looks at the last ', inputs.dropRecentWeeks, ' studies.'),
-    h('h3', null, 'Outreach groups (used in Phase 2)'),
+    h('h3', null, 'Outreach groups'),
     line('Regular: came to at least ', inputs.regularPct, '% of studies in the last ', inputs.regularWindowWeeks, ' weeks.'),
     line('New: first came within the last ', inputs.newWindowWeeks, ' weeks.'),
     line('Cold: missed the last ', inputs.coldMissedWeeks, ' or more studies in a row.'),
+    h('p', { class: 'muted small' }, 'Anyone who has attended but fits none of these is “Occasional”. Weeks marked “No study” are skipped when counting.'),
     h('h3', null, 'About the group'),
     line('AIA staff: ', inputs.staffCount, ' · Typical attendance: ', inputs.typicalAttendance),
     h('div', { class: 'btn-row' },

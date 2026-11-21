@@ -3,14 +3,14 @@ import * as fb from './fb.js';
 import { NOW, DELETE } from './fb.js';
 import {
   DEFAULT_SETTINGS, LEHIGH_TEAMS, sundaysBetween, checkinWindow, matchCheckin, normalizeName, tidyName,
-  fullName, personKey, randomToken, attendanceIndex, dateKey, activePeople,
+  fullName, personKey, randomToken, attendanceIndex, dateKey, activePeople, computeGroups, groupLabel,
 } from './logic.js';
 import { OWNER_EMAIL } from './firebase-config.js';
 
 export const S = {
   user: null, me: null,
   settings: { ...DEFAULT_SETTINGS }, semesters: [], teams: [], users: [], people: [], sundays: [],
-  pending: [], review: [],
+  pending: [], review: [], outreach: [],
   loaded: new Set(), ready: false, index: new Map(),
 };
 const listeners = new Set();
@@ -25,6 +25,16 @@ export const personTeam = p => p.teamId === 'other' ? (p.teamOther ? `Other: ${p
 export const visiblePeople = () => activePeople(S.people);
 export const sundayByDate = k => S.sundays.find(s => s.date === k);
 export const semesterFor = k => S.semesters.find(s => !s.deleted && s.startDate <= k && s.endDate >= k);
+let groupsMemo = { key: null, value: null };
+/** Outreach group for every active person (cached until data changes). */
+export function groups() {
+  const key = [S.people, S.sundays, S.settings, todayKey()];
+  if (!groupsMemo.key || groupsMemo.key.some((v, i) => v !== key[i]))
+    groupsMemo = { key, value: computeGroups({ people: S.people, sundays: S.sundays, settings: S.settings, todayKey: todayKey(), index: S.index }) };
+  return groupsMemo.value;
+}
+export const liveOutreach = () => S.outreach.filter(o => !o.deleted);
+export const userName = email => S.users.find(u => u.email === email)?.name || email || '';
 export const liveSemesters = () => S.semesters.filter(s => !s.deleted).sort((a, b) => a.startDate < b.startDate ? -1 : 1);
 
 // ---------- access ----------
@@ -59,6 +69,7 @@ export function start() {
     S.sundays = d.map(s => ({ ...s, date: s.id, attendees: s.attendees || {} }));
     S.index = attendanceIndex(S.sundays); mark('sundays');
   }));
+  unsubs.push(fb.watch('outreach', {}, d => { S.outreach = d; mark('outreach'); }));
   unsubs.push(fb.watch('checkins', { where: [['status', 'in', ['pending', 'review']]] }, d => {
     S.pending = d.filter(c => c.status === 'pending');
     S.review = d.filter(c => c.status === 'review').sort((a, b) => (a.submittedAt || 0) - (b.submittedAt || 0));
@@ -219,6 +230,7 @@ export async function restorePerson(p) {
 export async function purgePerson(p, auto = false) {
   const ops = S.sundays.filter(s => s.attendees[p.id]).map(s => ({ type: 'update', path: `sundays/${s.date}`, data: { [`attendees.${p.id}`]: DELETE } }));
   ops.push({ type: 'delete', path: `people/${p.id}` });
+  for (const o of S.outreach.filter(o => o.personId === p.id)) ops.push({ type: 'delete', path: `outreach/${o.id}` });
   await fb.batchWrite(ops);
   log('purge', `${auto ? 'Auto-removed (90 days in Trash)' : 'Permanently deleted'}: ${fullName(p)}`, { kind: 'person', refId: p.id, snapshot: JSON.parse(JSON.stringify(p)) });
 }
@@ -246,6 +258,46 @@ export async function mergePeople(keep, dupe) {
   }
   await fb.batchWrite(ops);
   log('merge', `Merged "${fullName(dupe)}" into ${fullName(keep)}`, { kind: 'person', refId: keep.id, mergedId: dupe.id });
+}
+
+// ---------- outreach ----------
+export async function setGroupOverride(p, group) {
+  await fb.updateOne(`people/${p.id}`, { groupOverride: group || DELETE, groupOverrideBy: group ? S.user.email : DELETE, groupOverrideAt: group ? NOW : DELETE });
+  log('group', group ? `Moved ${fullName(p)} to ${groupLabel(group)} (manual)` : `Set ${fullName(p)} back to automatic group`, { kind: 'person', refId: p.id });
+}
+const cleanOutreach = d => ({
+  by: d.by || S.user.email, date: d.date, method: d.method, notes: (d.notes || '').trim(),
+  nextFollowUp: d.nextFollowUp || '',
+});
+/** Logging new outreach also closes that person's earlier open follow-ups. */
+export async function logOutreach(p, d) {
+  const id = fb.newId('outreach');
+  const ops = [{ type: 'set', path: `outreach/${id}`, data: { personId: p.id, ...cleanOutreach(d), followUpDone: false, deleted: false, createdAt: NOW, createdBy: S.user.email } }];
+  for (const o of S.outreach) if (o.personId === p.id && !o.deleted && o.nextFollowUp && !o.followUpDone)
+    ops.push({ type: 'update', path: `outreach/${o.id}`, data: { followUpDone: true, followUpDoneAt: NOW, followUpDoneBy: S.user.email } });
+  await fb.batchWrite(ops);
+  log('outreach', `${userName(d.by)} — ${d.method} with ${fullName(p)}`, { kind: 'outreach', refId: id, personId: p.id });
+}
+export async function updateOutreach(o, d, p) {
+  const data = cleanOutreach(d);
+  await fb.updateOne(`outreach/${o.id}`, { ...data, updatedAt: NOW, updatedBy: S.user.email });
+  log('edit', `Edited outreach note for ${p ? fullName(p) : 'someone'}`, { kind: 'outreach', refId: o.id, changes: diff(o, data) });
+}
+export async function setFollowUpDone(o, done, p) {
+  await fb.updateOne(`outreach/${o.id}`, { followUpDone: done, followUpDoneAt: done ? NOW : DELETE, followUpDoneBy: done ? S.user.email : DELETE });
+  log('outreach', `${done ? 'Finished' : 'Reopened'} follow-up with ${p ? fullName(p) : 'someone'}`, { kind: 'outreach', refId: o.id });
+}
+export async function trashOutreach(o, p) {
+  await fb.updateOne(`outreach/${o.id}`, { deleted: true, deletedAt: NOW, deletedBy: S.user.email });
+  log('delete', `Deleted an outreach note for ${p ? fullName(p) : 'someone'}`, { kind: 'outreach', refId: o.id });
+}
+export async function restoreOutreach(o) {
+  await fb.updateOne(`outreach/${o.id}`, { deleted: false, deletedAt: DELETE, deletedBy: DELETE });
+  log('restore', 'Restored an outreach note', { kind: 'outreach', refId: o.id });
+}
+export async function purgeOutreach(o) {
+  await fb.removeOne(`outreach/${o.id}`);
+  log('purge', 'Permanently deleted an outreach note', { kind: 'outreach', refId: o.id, snapshot: JSON.parse(JSON.stringify(o)) });
 }
 
 // ---------- attendance ----------
