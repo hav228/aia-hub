@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#4E2A12">
   <meta name="robots" content="noindex">
-  <title>AIA Check-in</title>
+  <title>Check-in</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="checkin-page">
@@ -22,11 +22,11 @@
         <select name="classYear" required>
           <option value="">Choose…</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option><option>Grad</option>
         </select></label>
-      <label class="field"><span class="field-label">Sport *</span>
+      <label class="field" id="sport-wrap"><span class="field-label">Sport *</span>
         <select name="teamId" required><option value="">Loading teams…</option></select></label>
       <label class="field" id="other-wrap" hidden><span class="field-label">Which sport? *</span><input name="teamOther" maxlength="50"></label>
       <div id="new-fields">
-        <p class="muted small">First time here? Leave your number so we can stay in touch (optional — only AIA leaders and staff can see it).</p>
+        <p class="muted small">First time here? Leave your number so we can stay in touch (optional — only leaders and staff can see it).</p>
         <div class="row2">
           <label class="field"><span class="field-label">Phone (optional)</span><input name="phone" type="tel" autocomplete="tel" maxlength="25"></label>
           <label class="field"><span class="field-label">Email (optional)</span><input name="email" type="email" autocomplete="email" maxlength="90"></label>

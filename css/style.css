@@ -276,3 +276,14 @@ canvas.qr { display: block; width: 100%; max-width: 320px; height: auto; margin:
 @media (max-width: 760px) { .link-edit { grid-template-columns: 1fr 40px; } .link-edit > :nth-child(2), .link-edit > :nth-child(3) { grid-column: 1; } .link-edit > :nth-child(4) { grid-row: 1; grid-column: 2; } }
 .plan-strip { display: block; position: relative; text-decoration: none; color: var(--ink); padding-right: 2.2rem; }
 .plan-go { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); font-size: 1.6rem; color: var(--muted); }
+
+/* ---------- AIA / Cru switcher ---------- */
+.brand { flex-wrap: nowrap; }
+.brand-name { white-space: nowrap; }
+.org-switch { margin-left: auto; display: inline-flex; background: rgba(255,255,255,.15); border-radius: 999px; padding: 3px; gap: 2px; }
+.org-switch button { border: 0; background: transparent; color: #fff; font: inherit; font-weight: 700; font-size: .85rem; padding: .3rem .85rem; border-radius: 999px; cursor: pointer; min-height: 34px; }
+.org-switch button.on { background: #fff; color: var(--brown); }
+@media (min-width: 761px) { .org-switch { margin-left: 1rem; } }
+/* Cru gets its own accent so leaders always know which ministry they're in */
+body[data-org="cru"] { --brown: #1f4e5f; --brown-2: #2b6578; --brown-soft: #eaf1f3; --tan: #d5e5ea; }
+body[data-org="cru"] .logo { color: var(--brown); }

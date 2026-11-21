@@ -1,4 +1,4 @@
-# AIA Lehigh Leaders Hub: Setup (Phase 1)
+# Lehigh Leaders Hub (AIA + Cru): Setup
 
 This takes about 20–30 minutes, and you only do it once. No software to install. Everything happens in your web browser.
 
@@ -32,7 +32,7 @@ Go to https://console.firebase.google.com and open **cru-aia-lehigh**.
 2. Delete everything there. Open `firestore.rules` from this folder, copy all of it, and paste it in.
 3. Click **Publish**.
 
-These rules let approved leaders and staff do everything. Anyone else can only submit a check-in, and only with that week's code during the Sunday check-in window.
+These rules let approved leaders and staff do everything in their own ministry (AIA or Cru). Anyone else can only submit a check-in, and only with that week's code during the Sunday check-in window.
 
 ### 4. Turn on Google sign-in
 1. Left menu: **Security → Authentication → Get started** (older layouts: Build → Authentication).
@@ -88,6 +88,8 @@ Try these before we start Phase 2. Tell me anything that feels off.
 - [ ] When you're done testing: **This Week → More options → Reset to normal time**, and discard or delete any test check-ins and people.
 
 ---
+
+> **Whenever `firestore.rules` changes** (for example when Cru was added), copy the whole file into Firestore Database → Rules again and click **Publish**.
 
 ## Updating the site later
 When I send new files for a phase: go to the repo, click **Add file → Upload files**, drag in the new files and folders (same names replace the old ones), then **Commit changes**. The site updates in 1–2 minutes. **Keep your edited `js/firebase-config.js`.** Don't overwrite it with a blank one.

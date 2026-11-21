@@ -1,3 +1,4 @@
+import { ORG } from '../org.js';
 import { h, card, empty, fmtDate, fmtLong, select, field, toast, downloadFile, go } from '../ui.js';
 import { S, todayKey, liveSemesters, semesterFor, sundayByDate } from '../store.js';
 import {
@@ -32,6 +33,8 @@ function chart(canvas, config) {
   charts.push(c);
 }
 const chartBox = (height = 260) => { const cv = h('canvas'); return [h('div', { class: 'chart', style: `height:${height}px` }, cv), cv]; };
+// Drop the 2nd column (Team) for ministries without teams
+const cols = row => ORG.hasTeams ? row : row.filter((_, i) => i !== 1);
 const shortDate = k => fmtDate(k, { month: 'short', day: 'numeric' });
 const table = (head, rows) => h('div', { class: 'table-wrap' }, h('table', null,
   h('thead', null, h('tr', null, head.map(x => h('th', null, x)))),
@@ -53,12 +56,12 @@ export function renderReports(level, arg) {
   let picker, body, exportName, sections;
   if (level === 'week') {
     const held = S.sundays.filter(s => s.date <= today).sort((a, b) => b.date < a.date ? -1 : 1);
-    let k = arg || (held[0]?.date) || currentSundayKey(new Date(), S.settings);
-    picker = select(held.map(s => [s.date, `${fmtDate(s.date, { month: 'short', day: 'numeric', year: 'numeric' })}${s.status === 'nostudy' ? ' (no study)' : ''}`]), k, { 'aria-label': 'Week' });
+    let k = arg || (held[0]?.date) || currentSundayKey(new Date(), S.settings, ORG.day);
+    picker = select(held.map(s => [s.date, `${fmtDate(s.date, { month: 'short', day: 'numeric', year: 'numeric' })}${s.status === 'nostudy' ? ` (${ORG.noMeeting.toLowerCase()})` : ''}`]), k, { 'aria-label': 'Week' });
     picker.onchange = () => go(`reports/week/${picker.value}`);
     const rep = buildWeekReport({ sundays: S.sundays, people: S.people, teams: S.teams, dateKey: k, semester: semesterFor(k), todayKey: today });
     ({ body, sections } = weekBody(rep));
-    exportName = `AIA-week-${k}`;
+    exportName = `${ORG.short}-week-${k}`;
   } else if (level === 'semester') {
     const sem = sems.find(s => s.id === arg) || curSem;
     picker = select([...sems].reverse().map(s => [s.id, s.name]), sem.id, { 'aria-label': 'Semester' });
@@ -67,7 +70,7 @@ export function renderReports(level, arg) {
     const rep = buildPeriodReport({ sundays: S.sundays, people: S.people, teams: S.teams, settings: { ...S.settings, ...(view.threshold ? { inconsistentPct: view.threshold } : {}) },
       from: sem.startDate, to: sem.endDate, todayKey: today, prev: prevSem && { from: prevSem.startDate, to: prevSem.endDate, label: prevSem.name } });
     ({ body, sections } = periodBody(rep, sem.name, 'semester'));
-    exportName = `AIA-${sem.name.replace(/\s+/g, '-')}`;
+    exportName = `${ORG.short}-${sem.name.replace(/\s+/g, '-')}`;
   } else {
     const y = Number(arg) || schoolYearOf(today);
     const list = years.includes(y) ? years : [y, ...years];
@@ -77,7 +80,7 @@ export function renderReports(level, arg) {
     const rep = buildPeriodReport({ sundays: S.sundays, people: S.people, teams: S.teams, settings: { ...S.settings, ...(view.threshold ? { inconsistentPct: view.threshold } : {}) },
       ...r, todayKey: today, prev: { ...pr, label: schoolYearLabel(y - 1) } });
     ({ body, sections } = periodBody(rep, `School year ${schoolYearLabel(y)}`, 'year'));
-    exportName = `AIA-school-year-${y}-${y + 1}`;
+    exportName = `${ORG.short}-school-year-${y}-${y + 1}`;
   }
 
   const exportRow = h('div', { class: 'btn-row no-print' },
@@ -93,24 +96,24 @@ function weekBody(rep) {
   const [teamBox, teamCv] = chartBox(Math.max(120, rep.byTeam.length * 30 + 40));
   const body = h('div', { class: 'report' },
     h('h2', { class: 'print-title' }, `Weekly report — ${fmtLong(rep.date)}`),
-    rep.status === 'nostudy' ? h('p', { class: 'pill muted' }, 'This week was marked “No study”.') : null,
+    rep.status === 'nostudy' ? h('p', { class: 'pill muted' }, `This week was marked “${ORG.noMeeting}”.`) : null,
     h('div', { class: 'stats' }, statTile('Attendance', rep.total, rep.semAvg != null ? `Semester avg ${rep.semAvg}` : null),
       statTile('First-timers', rep.newCount), statTile('Returning', rep.returningCount)),
-    card('By team', rep.byTeam.length ? teamBox : empty('No attendance.')),
-    card('By class year', table(['Class year', 'Athletes'], rep.byClass.map(r => [r.name, r.checkins]))),
-    card(`Who came (${rep.total})`, rep.attendees.length ? table(['Name', 'Team', 'Class', ''], rep.attendees.map(a => [a.name, a.team, a.classYear, a.isNew ? 'First time' : ''])) : empty('No one yet.')));
-  setTimeout(() => rep.byTeam.length && chart(teamCv, { type: 'bar', data: { labels: rep.byTeam.map(r => r.name), datasets: [{ label: 'Athletes', data: rep.byTeam.map(r => r.checkins), backgroundColor: C1, borderRadius: 4, maxBarThickness: 22 }] }, options: { indexAxis: 'y', scales: { x: { beginAtZero: true, grid: { color: GRID }, ticks: { precision: 0 } }, y: { grid: { display: false } } } } }));
+    ORG.hasTeams ? card('By team', rep.byTeam.length ? teamBox : empty('No attendance.')) : null,
+    card('By class year', table(['Class year', 'People'], rep.byClass.map(r => [r.name, r.checkins]))),
+    card(`Who came (${rep.total})`, rep.attendees.length ? table(cols(['Name', 'Team', 'Class', '']), rep.attendees.map(a => cols([a.name, a.team, a.classYear, a.isNew ? 'First time' : '']))) : empty('No one yet.')));
+  setTimeout(() => ORG.hasTeams && rep.byTeam.length && chart(teamCv, { type: 'bar', data: { labels: rep.byTeam.map(r => r.name), datasets: [{ label: 'People', data: rep.byTeam.map(r => r.checkins), backgroundColor: C1, borderRadius: 4, maxBarThickness: 22 }] }, options: { indexAxis: 'y', scales: { x: { beginAtZero: true, grid: { color: GRID }, ticks: { precision: 0 } }, y: { grid: { display: false } } } } }));
   const sections = [
     { name: 'Summary', rows: [['Date', rep.date], ['Attendance', rep.total], ['First-timers', rep.newCount], ['Returning', rep.returningCount], ['Semester average', rep.semAvg ?? '']] },
-    { name: 'By team', rows: [['Team', 'Athletes'], ...rep.byTeam.map(r => [r.name, r.checkins])] },
-    { name: 'By class year', rows: [['Class year', 'Athletes'], ...rep.byClass.map(r => [r.name, r.checkins])] },
-    { name: 'Attendees', rows: [['Name', 'Team', 'Class year', 'First time?', 'How'], ...rep.attendees.map(a => [a.name, a.team, a.classYear, a.isNew ? 'Yes' : 'No', a.source === 'manual' ? 'Added by leader' : 'QR'])] },
+    ...(ORG.hasTeams ? [{ name: 'By team', rows: [['Team', 'People'], ...rep.byTeam.map(r => [r.name, r.checkins])] }] : []),
+    { name: 'By class year', rows: [['Class year', 'People'], ...rep.byClass.map(r => [r.name, r.checkins])] },
+    { name: 'Attendees', rows: [cols(['Name', 'Team', 'Class year', 'First time?', 'How']), ...rep.attendees.map(a => cols([a.name, a.team, a.classYear, a.isNew ? 'Yes' : 'No', a.source === 'manual' ? 'Added by leader' : 'QR']))] },
   ];
   return { body, sections };
 }
 
 function periodBody(rep, title, kind) {
-  if (!rep.studiesHeld) return { body: card(null, empty('No studies have happened in this period yet.')), sections: [] };
+  if (!rep.studiesHeld) return { body: card(null, empty('No meetings have happened in this period yet.')), sections: [] };
   const [lineBox, lineCv] = chartBox(240);
   const [stackBox, stackCv] = chartBox(240);
   const [teamBox, teamCv] = chartBox(Math.max(140, rep.byTeam.length * 28 + 40));
@@ -125,9 +128,9 @@ function periodBody(rep, title, kind) {
   const body = h('div', { class: 'report' },
     h('h2', { class: 'print-title' }, title),
     h('div', { class: 'stats' },
-      statTile('Studies held', rep.studiesHeld), statTile('Average attendance', rep.avg, rep.compare ? `${prevName}: ${rep.compare.avg || '—'}` : null),
-      statTile('Total check-ins', rep.totalCheckins), statTile('Different athletes', rep.uniquePeople),
-      statTile('New athletes', rep.newPeople), statTile('Returning athletes', rep.returningPeople)),
+      statTile('Meetings held', rep.studiesHeld), statTile('Average attendance', rep.avg, rep.compare ? `${prevName}: ${rep.compare.avg || '—'}` : null),
+      statTile('Total check-ins', rep.totalCheckins), statTile('Different people', rep.uniquePeople),
+      statTile('New people', rep.newPeople), statTile('Returning people', rep.returningPeople)),
     card('Attendance over time', lineBox),
     card('Highlights', h('div', { class: 'grid3' },
       h('div', null, h('h3', null, 'Highest weeks'), weekList(rep.highest)),
@@ -135,17 +138,17 @@ function periodBody(rep, title, kind) {
       h('div', null, h('h3', null, 'Inconsistent weeks'),
         h('p', { class: 'muted small' }, 'More than ', thrInput, '% above or below the average of ', String(rep.avg)), weekList(rep.inconsistent)))),
     card('New vs. returning each week', stackBox),
-    card('By team', teamBox, table(['Team', 'Check-ins', 'Different athletes'], rep.byTeam.map(r => [r.name, r.checkins, r.unique]))),
-    card('By class year', table(['Class year', 'Check-ins', 'Different athletes'], rep.byClass.map(r => [r.name, r.checkins, r.unique]))),
+    !ORG.hasTeams ? null : card('By team', teamBox, table(['Team', 'Check-ins', 'Different people'], rep.byTeam.map(r => [r.name, r.checkins, r.unique]))),
+    card('By class year', table(['Class year', 'Check-ins', 'Different people'], rep.byClass.map(r => [r.name, r.checkins, r.unique]))),
     card(`Compared with ${rep.compare?.label || prevName}`, rep.compare?.weeks.length ? cmpBox : empty(`No data for ${prevName}.`)),
     card('Member consistency', h('div', { class: 'grid2' },
-      h('div', null, h('h3', null, 'Most consistent'), table(['Name', 'Team', 'Weeks'], rep.mostConsistent.map(m => [h('a', { href: `#/person/${m.pid}` }, m.name), m.team, `${m.attended}/${m.possible}`]))),
+      h('div', null, h('h3', null, 'Most consistent'), table(cols(['Name', 'Team', 'Weeks']), rep.mostConsistent.map(m => cols([h('a', { href: `#/person/${m.pid}` }, m.name), m.team, `${m.attended}/${m.possible}`])))),
       h('div', null, h('h3', null, 'Attendance dropping'),
         h('p', { class: 'muted small' }, `Came to at least half the earlier studies but 1 or fewer of the last ${rep.recentWindow}.`),
-        rep.dropping.length ? table(['Name', 'Team', 'Last came'], rep.dropping.map(m => [h('a', { href: `#/person/${m.pid}` }, m.name), m.team, shortDate(m.lastAttended)])) : empty('No one — nice.'))),
+        rep.dropping.length ? table(cols(['Name', 'Team', 'Last came']), rep.dropping.map(m => cols([h('a', { href: `#/person/${m.pid}` }, m.name), m.team, shortDate(m.lastAttended)]))) : empty('No one — nice.'))),
       h('details', { class: 'print-open' }, h('summary', null, `Weeks attended — everyone (${rep.members.length})`),
-        table(['Name', 'Team', 'Class', 'Weeks', '%'], rep.members.map(m => [m.name, m.team, m.classYear, m.attended, `${m.rate}%`])))),
-    card('Week by week', table(['Sunday', 'Attendance', 'First-timers', 'Returning', 'vs. average'],
+        table(cols(['Name', 'Team', 'Class', 'Weeks', '%']), rep.members.map(m => cols([m.name, m.team, m.classYear, m.attended, `${m.rate}%`]))))),
+    card('Week by week', table([ORG.dayName, 'Attendance', 'First-timers', 'Returning', 'vs. average'],
       rep.weeks.map(w => [h('a', { href: `#/reports/week/${w.date}` }, shortDate(w.date)), w.count, w.newCount, w.returningCount, `${w.vsAvgPct > 0 ? '+' : ''}${w.vsAvgPct}%${w.inconsistent ? ' ⚑' : ''}`]))));
 
   setTimeout(() => {
@@ -154,7 +157,7 @@ function periodBody(rep, title, kind) {
       { label: 'Returning', data: rep.weeks.map(w => w.returningCount), backgroundColor: C1, borderColor: '#fff', borderWidth: { top: 2 }, borderSkipped: false, maxBarThickness: 28 },
       { label: 'First-time', data: rep.weeks.map(w => w.newCount), backgroundColor: C2, borderColor: '#fff', borderWidth: { bottom: 2 }, borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: false, maxBarThickness: 28 },
     ] }, options: { scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, grid: { color: GRID }, ticks: { precision: 0 } } } } });
-    chart(teamCv, { type: 'bar', data: { labels: rep.byTeam.map(r => r.name), datasets: [{ label: 'Check-ins', data: rep.byTeam.map(r => r.checkins), backgroundColor: C1, borderRadius: 4, maxBarThickness: 20 }] }, options: { indexAxis: 'y', interaction: { mode: 'nearest', intersect: true, axis: 'y' }, scales: { x: { beginAtZero: true, grid: { color: GRID }, ticks: { precision: 0 } }, y: { grid: { display: false } } } } });
+    if (ORG.hasTeams) chart(teamCv, { type: 'bar', data: { labels: rep.byTeam.map(r => r.name), datasets: [{ label: 'Check-ins', data: rep.byTeam.map(r => r.checkins), backgroundColor: C1, borderRadius: 4, maxBarThickness: 20 }] }, options: { indexAxis: 'y', interaction: { mode: 'nearest', intersect: true, axis: 'y' }, scales: { x: { beginAtZero: true, grid: { color: GRID }, ticks: { precision: 0 } }, y: { grid: { display: false } } } } });
     if (rep.compare?.weeks.length) {
       const n = Math.max(rep.weeks.length, rep.compare.weeks.length);
       chart(cmpCv, { type: 'line', data: { labels: Array.from({ length: n }, (_, i) => `Wk ${i + 1}`), datasets: [
@@ -165,15 +168,15 @@ function periodBody(rep, title, kind) {
   });
 
   const sections = [
-    { name: 'Summary', rows: [['Period', title], ['From', rep.from], ['To', rep.to], ['Studies held', rep.studiesHeld], ['Average attendance', rep.avg],
-      ['Total check-ins', rep.totalCheckins], ['Different athletes', rep.uniquePeople], ['New athletes', rep.newPeople], ['Returning athletes', rep.returningPeople],
+    { name: 'Summary', rows: [['Period', title], ['From', rep.from], ['To', rep.to], ['Meetings held', rep.studiesHeld], ['Average attendance', rep.avg],
+      ['Total check-ins', rep.totalCheckins], ['Different people', rep.uniquePeople], ['New people', rep.newPeople], ['Returning people', rep.returningPeople],
       ['Inconsistent threshold %', rep.threshold], [`Average (${rep.compare?.label || prevName})`, rep.compare?.avg ?? '']] },
-    { name: 'Week by week', rows: [['Sunday', 'Attendance', 'First-timers', 'Returning', 'vs. average %', 'Inconsistent?'], ...rep.weeks.map(w => [w.date, w.count, w.newCount, w.returningCount, w.vsAvgPct, w.inconsistent ? 'Yes' : ''])] },
-    { name: 'Highlights', rows: [['Type', 'Sunday', 'Attendance'], ...rep.highest.map(w => ['Highest', w.date, w.count]), ...rep.lowest.map(w => ['Lowest', w.date, w.count]), ...rep.inconsistent.map(w => ['Inconsistent', w.date, w.count])] },
-    { name: 'By team', rows: [['Team', 'Check-ins', 'Different athletes'], ...rep.byTeam.map(r => [r.name, r.checkins, r.unique])] },
-    { name: 'By class year', rows: [['Class year', 'Check-ins', 'Different athletes'], ...rep.byClass.map(r => [r.name, r.checkins, r.unique])] },
-    { name: 'Members', rows: [['Name', 'Team', 'Class year', 'Weeks attended', 'Studies held', '%', 'Last attended', 'New this period?', 'Dropping?'],
-      ...rep.members.map(m => [m.name, m.team, m.classYear, m.attended, m.possible, m.rate, m.lastAttended, m.isNew ? 'Yes' : '', rep.dropping.includes(m) ? 'Yes' : ''])] },
+    { name: 'Week by week', rows: [[ORG.dayName, 'Attendance', 'First-timers', 'Returning', 'vs. average %', 'Inconsistent?'], ...rep.weeks.map(w => [w.date, w.count, w.newCount, w.returningCount, w.vsAvgPct, w.inconsistent ? 'Yes' : ''])] },
+    { name: 'Highlights', rows: [['Type', ORG.dayName, 'Attendance'], ...rep.highest.map(w => ['Highest', w.date, w.count]), ...rep.lowest.map(w => ['Lowest', w.date, w.count]), ...rep.inconsistent.map(w => ['Inconsistent', w.date, w.count])] },
+    ...(ORG.hasTeams ? [{ name: 'By team', rows: [['Team', 'Check-ins', 'Different people'], ...rep.byTeam.map(r => [r.name, r.checkins, r.unique])] }] : []),
+    { name: 'By class year', rows: [['Class year', 'Check-ins', 'Different people'], ...rep.byClass.map(r => [r.name, r.checkins, r.unique])] },
+    { name: 'Members', rows: [cols(['Name', 'Team', 'Class year', 'Weeks attended', 'Meetings held', '%', 'Last attended', 'New this period?', 'Dropping?']),
+      ...rep.members.map(m => cols([m.name, m.team, m.classYear, m.attended, m.possible, m.rate, m.lastAttended, m.isNew ? 'Yes' : '', rep.dropping.includes(m) ? 'Yes' : '']))] },
     ...(rep.compare ? [{ name: 'Comparison', rows: [['Week #', 'This period', rep.compare.label], ...Array.from({ length: Math.max(rep.weeks.length, rep.compare.weeks.length) }, (_, i) => [i + 1, rep.weeks[i]?.count ?? '', rep.compare.weeks[i]?.count ?? ''])] }] : []),
   ];
   return { body, sections };

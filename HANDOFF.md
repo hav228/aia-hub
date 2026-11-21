@@ -1,4 +1,4 @@
-# AIA Lehigh Leaders Hub: Handoff Guide
+# Lehigh Leaders Hub (AIA + Cru): Handoff Guide
 
 This guide is for whoever runs the app after Harrison. Read it once when you take over, and again at the start of each semester. You don't need to know how to code.
 
@@ -6,12 +6,14 @@ This guide is for whoever runs the app after Harrison. Read it once when you tak
 
 ## 1. What this is
 
-A website for AIA leaders and staff. It has:
+One website for two ministries: **AIA** (Athletes in Action, which meets Sunday nights) and **Cru** (Thursday nights). Each one has **completely separate** people, attendance, outreach, schedules, study plans, settings and leader list. Anyone on both leader lists sees an **AIA | Cru** switcher in the top bar. The Cru side is the same app without the sport/team parts, and it uses a blue-teal color so you always know which ministry you're in.
+
+Each ministry has:
 
 | Section | What it does |
 |---|---|
 | **This Week** | The weekly QR code (print it or put it on a screen). Live attendance and the plan for tonight. |
-| **Studies** | Upcoming Sundays with their leaders, each study plan (passage, questions, notes, file links), comments, version history, and a searchable archive. |
+| **Studies** (AIA) / **Plans** (Cru) | Upcoming meeting nights with their leaders, each study plan (passage, questions, notes, file links), comments, version history, and a searchable archive. |
 | **People** | Every athlete, with private phone, email and notes. Merge duplicates and archive graduates. |
 | **Outreach** | Groups (New, Regular, Occasional, Cold, Potential, Inactive), outreach notes, and the "Needs follow-up this week" list. |
 | **Reports** | Weekly, semester and school-year attendance, with charts. Export to CSV, Excel or PDF. |
@@ -23,7 +25,7 @@ A website for AIA leaders and staff. It has:
 ### Where things live
 | Thing | Where | Who owns it now |
 |---|---|---|
-| The data (people, attendance and so on) | Firebase project **cru-aia-lehigh** (console.firebase.google.com) | hav228@lehigh.edu |
+| The data (people, attendance and so on) | Firebase project **cru-aia-lehigh** (console.firebase.google.com). AIA's data is at the top level of the database; Cru's is under `orgs/cru/`. | hav228@lehigh.edu |
 | The website files | GitHub repo **hav228/aia-hub** | GitHub user hav228 |
 | Sign-in | Firebase Authentication (Google accounts) | n/a |
 
@@ -33,12 +35,12 @@ Everything runs on free plans: Firebase "Spark" and GitHub Pages. There's no car
 
 ## 2. Everyday jobs
 
-**Give someone access:** More → Settings → Leaders & staff → **+ Add leader or staff**. Use the exact Google account they'll sign in with. Their @lehigh.edu email works.
+**Give someone access:** switch to the right ministry first, then More → Settings → Leaders & staff → **+ Add leader or staff**. Use the exact Google account they'll sign in with. Their @lehigh.edu email works. Someone who leads both ministries needs to be added on **both** sides.
 
 **Remove someone's access:** in the same place, click **Edit → Remove access**. Nothing they entered is deleted.
 
-**Sunday night:**
-1. Open **This Week**. Show the QR code on a screen or print it with **Print**.
+**Meeting night** (AIA Sunday, Cru Thursday):
+1. Open **This Week** on the right ministry. Show the QR code on a screen or print it with **Print**.
 2. Check-ins appear live as people scan.
 3. Use **+ Add someone** for anyone who forgot to scan.
 4. If a name lands in **Review** (More → Review), pick the right person or choose "It's a new person".
@@ -50,6 +52,8 @@ Everything runs on free plans: Firebase "Spark" and GitHub Pages. There's no car
 ---
 
 ## 3. Start-of-semester checklist
+Do this once for AIA and once for Cru: use the switcher at the top.
+
 1. **Settings → Semesters → + Add semester** with the first and last day. A QR code is created for every Sunday in between.
 2. **Studies → Fill in leader rotation** assigns leaders in turn. Adjust any Sunday with its dropdown.
 3. Ask every leader and staff member to enter their week under **More → Schedules**. When a schedule is empty, the app offers to copy last semester's.
@@ -76,6 +80,7 @@ You have two options.
    - Edit `js/firebase-config.js` on GitHub (open the file → ✏️ pencil → change `OWNER_EMAIL` → Commit).
    - Edit `firestore.rules` the same way (change the email inside `isOwner()`).
    - Copy the whole updated `firestore.rules` into Firebase console → Firestore Database → **Rules** → **Publish**.
+5. Add them to **both** leader lists (AIA and Cru) if they'll run both.
 
 **Option B: move the website to their GitHub account.** Only do this if hav228 should no longer hold it.
 1. On GitHub: repo **Settings → General → Danger Zone → Transfer ownership** to their GitHub username.
@@ -92,6 +97,7 @@ You have two options.
 ## 6. Changing or fixing the app
 - **Small text changes:** edit the file on GitHub (✏️ pencil → Commit). The site updates in 1–2 minutes.
 - **Bigger changes:** describe what you want to Claude. Give it this repo (hav228/aia-hub) and attach this guide. The code is plain HTML and JavaScript with no build step.
+- **Ministry settings** (name, meeting day, whether it has teams) are in `js/org.js`. You could add a third ministry there and in `firestore.rules`.
 - **Main files:**
   - `index.html`: the leader app
   - `checkin.html`: the public check-in form

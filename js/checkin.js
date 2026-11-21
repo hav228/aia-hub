@@ -1,12 +1,21 @@
 // Public check-in form. No login. Can only ADD a check-in (see firestore.rules).
-import { addOne, getMany, NOW } from './fb.js';
+import { addOne, getMany, NOW, setPrefix } from './fb.js';
+import { useOrg } from './org.js';
 import { parseKey } from './logic.js';
 
 const $ = s => document.querySelector(s);
 const params = new URLSearchParams(location.search);
+const ORG = useOrg(params.get('o') || 'aia');
+setPrefix(ORG.prefix);
 const d = params.get('d') || '', t = params.get('t') || '';
 const form = $('#ci-form'), msg = $('#ci-msg'), err = $('#ci-error');
-const SAVE_KEY = 'aia-checkin-me', DONE_KEY = `aia-checked-${d}`;
+const SAVE_KEY = `${ORG.key}-checkin-me`, DONE_KEY = `${ORG.key}-checked-${d}`;
+document.title = `${ORG.short} Check-in`;
+document.body.dataset.org = ORG.key;
+document.querySelector('.ci-head .logo').textContent = ORG.short;
+document.querySelector('.ci-title').textContent = `${ORG.dayName} Night Check-in`;
+if (!ORG.hasTeams) { document.getElementById('sport-wrap').hidden = true; form.teamId.required = false; }
+document.querySelector('#new-fields .muted').textContent = `First time here? Leave your number so we can stay in touch (optional — only ${ORG.short} leaders and staff can see it).`;
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
@@ -24,14 +33,14 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !t) {
 async function init(force = false) {
   if (!force && store.get(DONE_KEY)) return doneScreen(store.get(DONE_KEY));
   const sel = form.teamId;
-  try {
+  if (ORG.hasTeams) try {
     const teams = (await getMany('teams')).filter(x => x.active !== false)
       .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999) || a.name.localeCompare(b.name));
     sel.innerHTML = '<option value="">Choose…</option>' + teams.map(x => `<option value="${x.id}">${x.name.replace(/</g, '&lt;')}</option>`).join('') + '<option value="other">Other</option>';
   } catch (e) {
     console.error(e);
     sel.innerHTML = '<option value="">Choose…</option><option value="other">Other</option>';
-  }
+  } else sel.innerHTML = '<option value="" selected></option>';
   const me = store.get(SAVE_KEY);
   if (me) {
     for (const k of ['firstName', 'lastName', 'classYear', 'teamOther', 'phone', 'email']) if (me[k]) form[k].value = me[k];
@@ -53,7 +62,7 @@ form.addEventListener('submit', async e => {
     teamId: v('teamId'), teamOther: v('teamId') === 'other' ? v('teamOther') : '', phone: v('phone'), email: v('email'),
     status: 'pending', submittedAt: NOW,
   };
-  const missing = [!data.firstName && 'first name', !data.lastName && 'last name', !data.classYear && 'class year', !data.teamId && 'sport',
+  const missing = [!data.firstName && 'first name', !data.lastName && 'last name', !data.classYear && 'class year', ORG.hasTeams && !data.teamId && 'sport',
     data.teamId === 'other' && !data.teamOther && 'which sport'].filter(Boolean);
   if (missing.length) { err.textContent = `Please fill in: ${missing.join(', ')}.`; err.hidden = false; return; }
   const btn = form.querySelector('button[type=submit]');
@@ -67,7 +76,7 @@ form.addEventListener('submit', async e => {
   } catch (e2) {
     console.error(e2);
     err.textContent = e2.code === 'permission-denied'
-      ? 'This check-in isn’t open right now. It opens Sunday evening for that week’s study — if you’re at study now, ask a leader.'
+      ? `This check-in isn’t open right now. It opens ${ORG.dayName} evening for that week — if you’re there now, ask a leader.`
       : 'Couldn’t check in — please try again.';
     err.hidden = false;
   } finally { clearTimeout(slow); btn.disabled = false; btn.textContent = 'Check in'; }

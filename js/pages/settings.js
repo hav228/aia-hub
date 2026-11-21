@@ -1,3 +1,4 @@
+import { ORG } from '../org.js';
 import { h, card, empty, fmtDate, toast, confirmBox, modal, select, field, downloadFile } from '../ui.js';
 import * as fb from '../fb.js';
 import {
@@ -12,8 +13,8 @@ export function renderMore() {
   return [h('h1', null, 'More'),
     card(null,
       link('#/review', `Review check-ins${S.review.length ? ` (${S.review.length} waiting)` : ''}`, 'Check-ins that might be someone already in the list'),
-      link('#/schedules', 'Schedules', 'Everyone’s weekly schedule and “Find a time” for meetings'),
-      link('#/schedules/find', 'Find a time', 'See when a group of leaders and staff are all free'),
+      link('#/schedules', 'Schedules', `Every ${ORG.short} leader’s weekly schedule`),
+      link('#/schedules/find', 'Find a time', `See when a group of ${ORG.short} leaders and staff are all free`),
       link('#/settings', 'Settings', 'Semesters, teams, leader logins, check-in times, thresholds'),
       link('#/activity', 'Activity log', 'Who changed what, and when'),
       link('#/trash', 'Trash', 'Restore anything deleted in the last 90 days')),
@@ -24,7 +25,7 @@ export function renderMore() {
 
 export function renderSettings() {
   return [h('div', { class: 'page-head' }, h('a', { class: 'btn icon', href: '#/more', 'aria-label': 'Back' }, '‹'), h('h1', null, 'Settings')),
-    semestersCard(), usersCard(), checkinCard(), thresholdsCard(), teamsCard(), backupCard(), sampleCard()];
+    semestersCard(), usersCard(), checkinCard(), thresholdsCard(), ORG.hasTeams ? teamsCard() : null, backupCard(), sampleCard()];
 }
 
 // ---------- semesters ----------
@@ -32,9 +33,9 @@ function semestersCard() {
   const sems = liveSemesters().reverse();
   const removed = S.semesters.filter(s => s.deleted);
   return card('Semesters',
-    h('p', { class: 'muted small' }, 'A check-in QR code is created for every Sunday between the start and end dates. Mark break weeks as “No study” on the This Week page.'),
+    h('p', { class: 'muted small' }, `A check-in QR code is created for every ${ORG.dayName} between the start and end dates. Mark break weeks as “${ORG.noMeeting}” on the This Week page.`),
     sems.length ? h('ul', { class: 'set-list' }, sems.map(s => h('li', null,
-      h('div', null, h('strong', null, s.name), h('div', { class: 'muted small' }, `${fmtDate(s.startDate)} – ${fmtDate(s.endDate, { month: 'short', day: 'numeric', year: 'numeric' })} · ${sundaysBetween(s.startDate, s.endDate).length} Sundays`)),
+      h('div', null, h('strong', null, s.name), h('div', { class: 'muted small' }, `${fmtDate(s.startDate)} – ${fmtDate(s.endDate, { month: 'short', day: 'numeric', year: 'numeric' })} · ${sundaysBetween(s.startDate, s.endDate, ORG.day).length} ${ORG.dayName}s`)),
       h('button', { class: 'btn small', onclick: () => semesterModal(s) }, 'Edit')))) : empty('No semesters yet — add your current one.'),
     h('button', { class: 'btn primary', onclick: () => semesterModal() }, '+ Add semester'),
     removed.length ? h('details', null, h('summary', { class: 'muted small' }, `Removed semesters (${removed.length})`),
@@ -49,7 +50,7 @@ function semesterModal(sem) {
   const end = h('input', { type: 'date', value: sem?.endDate || '' });
   const actions = [{ label: 'Cancel' }];
   if (sem) actions.push({ label: 'Remove', kind: 'danger-outline', onClick: async () => {
-    if (!(await confirmBox('Remove this semester?', 'Its Sundays and attendance are kept, and you can restore it below the semester list.', 'Remove', true))) return false;
+    if (!(await confirmBox('Remove this semester?', `Its ${ORG.dayName}s and attendance are kept, and you can restore it below the semester list.`, 'Remove', true))) return false;
     await deleteSemester(sem); toast('Removed');
   } });
   actions.push({ label: 'Save', kind: 'primary', onClick: async () => {
@@ -58,19 +59,19 @@ function semesterModal(sem) {
     const overlap = liveSemesters().find(s => s.id !== sem?.id && s.startDate <= end.value && s.endDate >= start.value);
     if (overlap) { toast(`Those dates overlap ${overlap.name}`, 'err'); return false; }
     await saveSemester(sem, { name: `${term.value} ${y}`, term: term.value, year: y, startDate: start.value, endDate: end.value, schoolYear: schoolYearLabel(schoolYearOf(start.value)) });
-    toast('Saved — Sundays created');
+    toast(`Saved — ${ORG.dayName}s created`);
   } });
   modal(sem ? `Edit ${sem.name}` : 'Add a semester', h('div', { class: 'form' },
     h('div', { class: 'row2' }, field('Term', term), field('Year', year)),
     h('div', { class: 'row2' }, field('First day', start), field('Last day', end)),
-    h('p', { class: 'muted small' }, 'Tip: use the first and last day of classes or finals — only Sundays in between matter.')), actions);
+    h('p', { class: 'muted small' }, `Tip: use the first and last day of classes or finals — only ${ORG.dayName}s in between matter.`)), actions);
 }
 
 // ---------- leader / staff logins ----------
 function usersCard() {
   const users = [...S.users].sort((a, b) => (a.role || '').localeCompare(b.role || '') || (a.name || '').localeCompare(b.name || ''));
-  return card('Leaders & staff (who can sign in)',
-    h('p', { class: 'muted small' }, 'Only these Google accounts can sign in. Everyone on the list can view and edit everything.'),
+  return card(`${ORG.short} leaders & staff (who can sign in)`,
+    h('p', { class: 'muted small' }, `Only these Google accounts can sign in to ${ORG.short}. Everyone on the list can view and edit all ${ORG.short} data. (${ORG.key === 'aia' ? 'Cru' : 'AIA'} has its own separate list.)`),
     h('ul', { class: 'set-list' }, users.map(u => h('li', null,
       h('div', null, h('strong', null, u.name || u.email), u.active === false ? h('span', { class: 'tag' }, 'Paused') : null,
         h('div', { class: 'muted small' }, `${u.role || 'Leader'} · ${u.email}${u.email === OWNER_EMAIL ? ' · owner' : ''}`)),
@@ -104,9 +105,9 @@ function checkinCard() {
   const open = h('input', { type: 'time', value: s.checkinOpen });
   const close = h('input', { type: 'time', value: s.checkinClose });
   return h('div', { 'data-form': '' }, card('Check-in times',
-    h('p', { class: 'muted small' }, 'Each week’s QR code only accepts check-ins during this window. If the close time is earlier than the open time, it means Monday morning.'),
-    h('div', { class: 'row2' }, field('Opens Sunday at', open), field('Closes at', close)),
-    h('button', { class: 'btn primary', onclick: async () => { await saveSettings({ checkinOpen: open.value, checkinClose: close.value }); toast('Saved — upcoming Sundays updated'); } }, 'Save times')));
+    h('p', { class: 'muted small' }, 'Each week’s QR code only accepts check-ins during this window. If the close time is earlier than the open time, it means the next morning.'),
+    h('div', { class: 'row2' }, field(`Opens ${ORG.dayName} at`, open), field('Closes at', close)),
+    h('button', { class: 'btn primary', onclick: async () => { await saveSettings({ checkinOpen: open.value, checkinClose: close.value }); toast(`Saved — upcoming ${ORG.dayName}s updated`); } }, 'Save times')));
 }
 
 // ---------- thresholds ----------
@@ -129,9 +130,9 @@ function thresholdsCard() {
     line('Regular: came to at least ', inputs.regularPct, '% of studies in the last ', inputs.regularWindowWeeks, ' weeks.'),
     line('New: first came within the last ', inputs.newWindowWeeks, ' weeks.'),
     line('Cold: missed the last ', inputs.coldMissedWeeks, ' or more studies in a row.'),
-    h('p', { class: 'muted small' }, 'Anyone who has attended but fits none of these is “Occasional”. Weeks marked “No study” are skipped when counting.'),
+    h('p', { class: 'muted small' }, `Anyone who has attended but fits none of these is “Occasional”. Weeks marked “${ORG.noMeeting}” are skipped when counting.`),
     h('h3', null, 'About the group'),
-    line('AIA staff: ', inputs.staffCount, ' · Typical attendance: ', inputs.typicalAttendance),
+    line(`${ORG.staffLabel}: `, inputs.staffCount, ' · Typical attendance: ', inputs.typicalAttendance),
     h('div', { class: 'btn-row' },
       h('button', { class: 'btn primary', onclick: async () => {
         const patch = {};
@@ -171,7 +172,7 @@ function backupCard() {
       e.target.disabled = true; e.target.textContent = 'Preparing…';
       try {
         const data = await fullBackup();
-        downloadFile(`AIA-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(data, null, 1), 'application/json');
+        downloadFile(`${ORG.short}-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(data, null, 1), 'application/json');
       } finally { e.target.disabled = false; e.target.textContent = 'Download full backup'; }
     } }, 'Download full backup'));
 }
@@ -187,7 +188,7 @@ function sampleCard() {
     finally { btns.forEach(b => (b.disabled = false)); }
   };
   return card('Sample data',
-    h('p', { class: 'muted small' }, 'Fills the app with made-up athletes, attendance, outreach notes, schedules and study plans so you can see how everything works. Every sample item is tagged, so one click removes all of it and leaves your real data alone. Sample leaders use @example.com emails, which can’t sign in.'),
+    h('p', { class: 'muted small' }, `Fills ${ORG.short} with made-up ${ORG.hasTeams ? 'athletes' : 'students'}, attendance, outreach notes, schedules and study plans so you can see how everything works. Every sample item is tagged, so one click removes all of it and leaves your real data alone. Sample leaders use @example.com emails, which can’t sign in.`),
     hasSample ? h('p', { class: 'pill' }, 'Sample data is loaded') : null,
     h('div', { class: 'btn-row' },
       hasSample ? null : h('button', { class: 'btn', onclick: run(loadSampleData, () => 'Sample data loaded') }, 'Load sample data'),

@@ -6,6 +6,7 @@ import {
   fullName, personKey, randomToken, attendanceIndex, dateKey, activePeople, computeGroups, groupLabel,
 } from './logic.js';
 import { OWNER_EMAIL } from './firebase-config.js';
+import { ORG, ORGS, useOrg } from './org.js';
 
 export const S = {
   user: null, me: null,
@@ -21,7 +22,9 @@ let unsubs = [];
 export const todayKey = () => dateKey(new Date());
 export const peopleById = () => new Map(S.people.map(p => [p.id, p]));
 export const teamName = id => id === 'other' ? 'Other' : (S.teams.find(t => t.id === id)?.name || 'Unknown');
-export const personTeam = p => p.teamId === 'other' ? (p.teamOther ? `Other: ${p.teamOther}` : 'Other') : teamName(p.teamId);
+export const personTeam = p => !ORG.hasTeams ? '' : p.teamId === 'other' ? (p.teamOther ? `Other: ${p.teamOther}` : 'Other') : teamName(p.teamId);
+/** "Team · Class year" (just class year for ministries without teams) */
+export const meta = p => [personTeam(p), p.classYear || '—'].filter(Boolean).join(' · ');
 export const visiblePeople = () => activePeople(S.people);
 export const sundayByDate = k => S.sundays.find(s => s.date === k);
 export const semesterFor = k => S.semesters.find(s => !s.deleted && s.startDate <= k && s.endDate >= k);
@@ -38,23 +41,37 @@ export const userName = email => S.users.find(u => u.email === email)?.name || e
 export const liveSemesters = () => S.semesters.filter(s => !s.deleted).sort((a, b) => a.startDate < b.startDate ? -1 : 1);
 
 // ---------- access ----------
+/** Works out which ministries this person can use (AIA, Cru, or both). */
 export async function checkAccess(user) {
-  S.user = user;
-  if (user.email === OWNER_EMAIL) {
-    let me = await fb.getOne(`users/${user.email}`);
-    if (!me) {
-      me = { email: user.email, name: user.name, role: 'Leader', active: true, addedBy: 'setup', addedAt: NOW };
-      await fb.setOne(`users/${user.email}`, me);
-    }
-    S.me = { ...me, owner: true };
-    return true;
+  S.user = user; S.access = {};
+  const owner = user.email === OWNER_EMAIL;
+  for (const o of Object.values(ORGS)) {
+    const path = `/${o.prefix}users/${user.email}`;
+    try {
+      let me = await fb.getOne(path);
+      if (!me && owner) {
+        me = { email: user.email, name: user.name, role: 'Leader', active: true, addedBy: 'setup', addedAt: NOW };
+        await fb.setOne(path, me);
+      }
+      if (me && (me.active || owner)) S.access[o.key] = { ...me, owner };
+    } catch (e) { /* permission denied = not on that ministry's list */ }
   }
-  try {
-    const me = await fb.getOne(`users/${user.email}`);
-    if (me && me.active) { S.me = me; return true; }
-  } catch (e) { /* permission denied = not on the list */ }
-  return false;
+  return Object.keys(S.access).length > 0;
 }
+export const orgChoices = () => Object.values(ORGS).filter(o => S.access?.[o.key]);
+
+/** Switch the whole app to one ministry's data. */
+export function switchOrg(key) {
+  if (!S.access[key]) key = Object.keys(S.access)[0];
+  useOrg(key); fb.setPrefix(ORG.prefix); S.me = S.access[key];
+  try { localStorage.setItem('hub-org', key); } catch { /* ignore */ }
+  stop();
+  Object.assign(S, { settings: { ...DEFAULT_SETTINGS }, semesters: [], teams: [], users: [], people: [], sundays: [], pending: [], review: [],
+    outreach: [], schedules: [], exceptions: [], index: new Map() });
+  commentWatch.unsub?.(); commentWatch = { k: null, unsub: null }; comments.k = null; comments.list = [];
+  start();
+}
+export function preferredOrg() { try { return localStorage.getItem('hub-org') || 'aia'; } catch { return 'aia'; } }
 
 // ---------- live data ----------
 export function start() {
@@ -81,7 +98,7 @@ export function start() {
 export function stop() { unsubs.forEach(u => u()); unsubs = []; S.loaded.clear(); S.ready = false; }
 
 async function firstLoad() {
-  if (!S.teams.length) await seedTeams();
+  if (ORG.hasTeams && !S.teams.length) await seedTeams();
   await ensureSundays();
   processPending();
 }
@@ -93,9 +110,11 @@ export async function seedTeams() {
 let ensuring = false;
 export async function ensureSundays() {
   if (ensuring) return; ensuring = true;
+  const org = ORG.key;
   try {
     for (const sem of liveSemesters()) {
-      for (const k of sundaysBetween(sem.startDate, sem.endDate)) {
+      for (const k of sundaysBetween(sem.startDate, sem.endDate, ORG.day)) {
+        if (ORG.key !== org) return;
         const existing = sundayByDate(k);
         if (existing) {
           if (existing.semesterId !== sem.id) await fb.updateOne(`sundays/${k}`, { semesterId: sem.id });
@@ -109,7 +128,7 @@ export async function ensureSundays() {
       }
     }
   } catch (e) { console.error('ensureSundays', e); }
-  finally { ensuring = false; }
+  finally { ensuring = false; if (ORG.key !== org && S.ready) ensureSundays(); }
 }
 
 // ---------- activity log ----------
@@ -130,9 +149,10 @@ function diff(before, after) {
 let processing = false;
 export async function processPending() {
   if (processing || !S.ready) return; processing = true;
+  const org = ORG.key;
   try {
-    for (const c of [...S.pending]) await fileCheckin(c.id).catch(e => console.error('file checkin', e));
-  } finally { processing = false; }
+    for (const c of [...S.pending]) { if (ORG.key !== org) break; await fileCheckin(c.id).catch(e => console.error('file checkin', e)); }
+  } finally { processing = false; if (ORG.key !== org) processPending(); }
 }
 
 function personFromCheckin(c) {
@@ -399,7 +419,7 @@ export async function removeAttendance(k, p) {
 }
 export async function setSundayStatus(k, status) {
   await fb.updateOne(`sundays/${k}`, { status });
-  log('edit', `${k} marked as ${status === 'nostudy' ? '"No study"' : 'a study night'}`, { kind: 'sunday', refId: k });
+  log('edit', `${k} marked as ${status === 'nostudy' ? `"${ORG.noMeeting}"` : 'a meeting night'}`, { kind: 'sunday', refId: k });
 }
 export async function openCheckinNow(k, hours = 2) {
   const now = new Date();

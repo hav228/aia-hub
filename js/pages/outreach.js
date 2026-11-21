@@ -1,5 +1,6 @@
+import { ORG } from '../org.js';
 import { h, card, empty, fmtDate, toast, select, go } from '../ui.js';
-import { S, groups, liveOutreach, personTeam, userName, todayKey, setFollowUpDone } from '../store.js';
+import { S, groups, liveOutreach, personTeam, meta, userName, todayKey, setFollowUpDone } from '../store.js';
 import { GROUPS, groupLabel, followUpsDue, latestOutreach, fullName, normalizeName, addDays } from '../logic.js';
 import { outreachModal, addPersonModal, teamOptions } from './common.js';
 
@@ -22,7 +23,7 @@ export function renderOutreach(groupArg) {
       return h('li', { class: overdue ? 'overdue' : '' },
         h('div', { class: 'fu-main' },
           h('a', { href: `#/person/${p.id}` }, h('strong', null, fullName(p))),
-          h('span', { class: 'muted small' }, ` ${personTeam(p)}`),
+          h('span', { class: 'muted small' }, ` ${meta(p)}`),
           h('div', { class: 'small' }, h('span', { class: overdue ? 'due overdue' : 'due' }, overdue ? `Overdue · was due ${short(o.nextFollowUp)}` : o.nextFollowUp === today ? 'Due today' : `Due ${short(o.nextFollowUp)}`),
             h('span', { class: 'muted' }, ` · last: ${o.method} by ${userName(o.by)} on ${short(o.date)}`)),
           o.notes ? h('div', { class: 'muted small clamp' }, o.notes) : null),
@@ -50,8 +51,9 @@ export function renderOutreach(groupArg) {
     const rows = [...G.entries()].filter(([, g]) => g.group === view.group).map(([pid, g]) => ({ p: byId.get(pid), g }))
       .filter(r => r.p && (!view.team || r.p.teamId === view.team) && (!qn || normalizeName(fullName(r.p)).includes(qn)));
     const teams = new Map();
-    for (const r of rows) { const t = personTeam(r.p); if (!teams.has(t)) teams.set(t, []); teams.get(t).push(r); }
-    const sorted = [...teams.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    for (const r of rows) { const t = ORG.hasTeams ? personTeam(r.p) : (r.p.classYear || 'Class year unknown'); if (!teams.has(t)) teams.set(t, []); teams.get(t).push(r); }
+    const yearOrder = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad', 'Class year unknown'];
+    const sorted = [...teams.entries()].sort((a, b) => ORG.hasTeams ? (b[1].length - a[1].length || a[0].localeCompare(b[0])) : yearOrder.indexOf(a[0]) - yearOrder.indexOf(b[0]));
     listEl.replaceChildren(...(rows.length ? sorted.map(([team, rs]) => h('div', { class: 'team-group' },
       h('h3', null, `${team} `, h('span', { class: 'muted' }, `(${rs.length})`)),
       h('div', { class: 'people-list' }, rs.sort((a, b) => fullName(a.p).localeCompare(fullName(b.p))).map(({ p, g }) => {
@@ -59,7 +61,7 @@ export function renderOutreach(groupArg) {
         return h('div', { class: 'person-row with-action' },
           h('a', { href: `#/person/${p.id}`, class: 'row-link' },
             h('div', null, h('strong', null, fullName(p)), g.manual ? h('span', { class: 'tag', title: `Automatic group would be ${groupLabel(g.auto)}` }, 'set manually') : null),
-            h('div', { class: 'muted small' }, [p.classYear || '—',
+            h('div', { class: 'muted small' }, [ORG.hasTeams ? (p.classYear || '—') : null,
               g.lastAttended ? `last came ${short(g.lastAttended)}` : 'never attended',
               g.window && g.lastAttended ? `${g.recent}/${g.window} recent` : null].filter(Boolean).join(' · ')),
             h('div', { class: 'small' + (l ? '' : ' muted') }, l ? `Last contact: ${l.method} · ${userName(l.by)} · ${short(l.date)}` : 'No outreach logged yet')),
@@ -79,10 +81,10 @@ export function renderOutreach(groupArg) {
     dueCard,
     coldUntouched.length ? card(`Cold, and no one has reached out in 2 weeks (${coldUntouched.length})`,
       h('div', { class: 'chip-list' }, coldUntouched.sort((a, b) => fullName(a).localeCompare(fullName(b))).map(p =>
-        h('button', { class: 'btn small', onclick: () => outreachModal(p) }, `${fullName(p)} · ${personTeam(p)}`)))) : null,
+        h('button', { class: 'btn small', onclick: () => outreachModal(p) }, `${fullName(p)} · ${meta(p)}`)))) : null,
     chips,
     h('p', { class: 'muted small' }, desc + '.', view.group === 'inactive' ? '' : ' Groups update automatically from attendance; open a person to move them manually.'),
-    h('div', { class: 'filters' }, search, teamSel),
+    h('div', { class: 'filters' }, search, ORG.hasTeams ? teamSel : null),
     listEl,
   ];
 }

@@ -1,6 +1,6 @@
 {
-  "name": "AIA Lehigh Leaders",
-  "short_name": "AIA Leaders",
+  "name": "Lehigh Leaders Hub (AIA + Cru)",
+  "short_name": "Leaders Hub",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

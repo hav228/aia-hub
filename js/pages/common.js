@@ -1,7 +1,8 @@
+import { ORG } from '../org.js';
 import { OUTREACH_METHODS, addDays as _addDays, dateKey as _dateKey } from '../logic.js';
 import { logOutreach, updateOutreach, todayKey as _todayKey } from '../store.js';
 import { h, field, select, modal, toast } from '../ui.js';
-import { S, visiblePeople, personTeam, addPerson } from '../store.js';
+import { S, visiblePeople, personTeam, addPerson, meta } from '../store.js';
 import { CLASS_YEARS, fullName, normalizeName } from '../logic.js';
 
 export function teamOptions(includeInactiveId) {
@@ -26,8 +27,8 @@ export function personForm(p = {}) {
   f.teamId.addEventListener('change', syncOther); syncOther();
   const el = h('div', { class: 'form', 'data-form': '' },
     h('div', { class: 'row2' }, field('First name', f.firstName), field('Last name', f.lastName)),
-    h('div', { class: 'row2' }, field('Class year', f.classYear), field('Team', f.teamId)),
-    otherWrap,
+    ORG.hasTeams ? h('div', { class: 'row2' }, field('Class year', f.classYear), field('Team', f.teamId)) : field('Class year', f.classYear),
+    ORG.hasTeams ? otherWrap : null,
     h('div', { class: 'row2' }, field('Phone (private)', f.phone), field('Email (private)', f.email)),
     field('Notes (private — leaders & staff only)', f.notes));
   const read = () => Object.fromEntries(Object.entries(f).map(([k, i]) => [k, i.value]));
@@ -65,7 +66,7 @@ export function pickPerson({ title = 'Find a person', exclude = new Set(), onPic
       .filter(p => !qn || normalizeName(fullName(p)).includes(qn) || (p.aliases || []).some(a => a.includes(qn)))
       .sort((a, b) => fullName(a).localeCompare(fullName(b))).slice(0, 40);
     list.replaceChildren(...rows.map(p => h('button', { class: 'pick-row', type: 'button', onclick: async () => { close(); await onPick(p); } },
-      h('strong', null, fullName(p)), h('span', { class: 'muted' }, ` ${personTeam(p)} · ${p.classYear || '—'}${p.archived ? ' · archived' : ''}`))),
+      h('strong', null, fullName(p)), h('span', { class: 'muted' }, ` ${meta(p)}${p.archived ? ' · archived' : ''}`))),
     rows.length ? null : h('p', { class: 'empty' }, 'No one matches.'));
   };
   input.addEventListener('input', draw); draw();

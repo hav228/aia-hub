@@ -28,12 +28,13 @@ const pad = n => String(n).padStart(2, '0');
 export function dateKey(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 export function parseKey(k) { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); }
 export function addDays(k, n) { const d = parseKey(k); d.setDate(d.getDate() + n); return dateKey(d); }
-export function isSunday(k) { return parseKey(k).getDay() === 0; }
+export function isSunday(k, dow = 0) { return parseKey(k).getDay() === dow; }
 
-export function sundaysBetween(startKey, endKey) {
+/** Every meeting day (default Sunday = 0; Thursday = 4) between two dates. */
+export function sundaysBetween(startKey, endKey, dow = 0) {
   if (!startKey || !endKey || startKey > endKey) return [];
   let d = parseKey(startKey);
-  d.setDate(d.getDate() + ((7 - d.getDay()) % 7));
+  d.setDate(d.getDate() + ((dow - d.getDay() + 7) % 7));
   const out = [];
   while (dateKey(d) <= endKey) { out.push(dateKey(d)); d.setDate(d.getDate() + 7); }
   return out;
@@ -49,15 +50,15 @@ export function checkinWindow(sundayKey, settings) {
   return { opensAt, closesAt };
 }
 
-// The Sunday the "This Week" page should show by default.
-export function currentSundayKey(now, settings) {
+// The meeting day the "This Week" page should show by default (dow: 0 = Sunday, 4 = Thursday).
+export function currentSundayKey(now, settings, dow = 0) {
   const today = dateKey(now);
-  if (now.getDay() === 0) return today;
-  if (now.getDay() === 1) {
+  if (now.getDay() === dow) return today;
+  if (now.getDay() === (dow + 1) % 7) {
     const yesterday = addDays(today, -1);
     if (now < checkinWindow(yesterday, settings).closesAt) return yesterday;
   }
-  return addDays(today, 7 - now.getDay());
+  return addDays(today, (dow - now.getDay() + 7) % 7);
 }
 
 export function schoolYearOf(k) { const d = parseKey(k); const y = d.getFullYear(); return d.getMonth() >= 6 ? y : y - 1; } // Jul+ = new year
@@ -171,6 +172,7 @@ const round1 = x => Math.round(x * 10) / 10;
 
 function teamLabel(entry, teamsById) {
   if (!entry) return 'Unknown';
+  if (!entry.teamId && !entry.teamOther) return '';
   if (entry.teamId === 'other') return entry.teamOther ? `Other: ${entry.teamOther}` : 'Other';
   return teamsById.get(entry.teamId)?.name || 'Unknown';
 }

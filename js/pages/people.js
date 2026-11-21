@@ -1,5 +1,6 @@
+import { ORG } from '../org.js';
 import { h, card, empty, fmtDate, toast, confirmBox, modal, select, field, go } from '../ui.js';
-import { S, visiblePeople, personTeam, updatePerson, setArchived, trashPerson, mergePeople, removeAttendance, groups, setGroupOverride, userName, setFollowUpDone, trashOutreach, todayKey } from '../store.js';
+import { S, visiblePeople, personTeam, meta, updatePerson, setArchived, trashPerson, mergePeople, removeAttendance, groups, setGroupOverride, userName, setFollowUpDone, trashOutreach, todayKey } from '../store.js';
 import { CLASS_YEARS, fullName, normalizeName, findPossibleDuplicates, GROUPS, groupLabel } from '../logic.js';
 import { personForm, addPersonModal, pickPerson, teamOptions, outreachModal } from './common.js';
 
@@ -23,7 +24,7 @@ export function renderPeople() {
       const dates = S.index.get(p.id) || [];
       return h('a', { class: 'person-row', href: `#/person/${p.id}` },
         h('div', null, h('strong', null, fullName(p)), p.sample ? h('span', { class: 'tag' }, 'Sample') : null, G.get(p.id) ? h('span', { class: `tag g-${G.get(p.id).group}` }, groupLabel(G.get(p.id).group)) : null),
-        h('div', { class: 'muted small' }, `${personTeam(p)} · ${p.classYear || '—'} · ${dates.length} week${dates.length === 1 ? '' : 's'}${dates.length ? ` · last ${fmtDate(dates[dates.length - 1], { month: 'short', day: 'numeric' })}` : ''}`));
+        h('div', { class: 'muted small' }, `${meta(p)} · ${dates.length} week${dates.length === 1 ? '' : 's'}${dates.length ? ` · last ${fmtDate(dates[dates.length - 1], { month: 'short', day: 'numeric' })}` : ''}`));
     }) : [empty('No one matches.')]));
   };
   search.addEventListener('input', () => { view.q = search.value; draw(); });
@@ -39,7 +40,7 @@ export function renderPeople() {
   return [
     h('div', { class: 'page-head' }, h('h1', null, 'People'), h('button', { class: 'btn primary', onclick: () => addPersonModal(id => go(`person/${id}`)) }, '+ Add person')),
     dupes.length ? h('button', { class: 'notice', onclick: () => dupesModal(dupes) }, `${dupes.length} possible duplicate${dupes.length > 1 ? 's' : ''} to check →`) : null,
-    h('div', { class: 'filters' }, search, teamSel, yearSel, showSel),
+    h('div', { class: 'filters' }, search, ORG.hasTeams ? teamSel : null, yearSel, showSel),
     h('div', { class: 'list-head' }, countEl),
     list,
   ];
@@ -48,8 +49,8 @@ export function renderPeople() {
 function dupesModal(pairs) {
   const body = h('div', null, h('p', { class: 'muted small' }, 'These names look alike. If two are the same person, merge them. Their attendance is combined and nothing is lost.'),
     pairs.slice(0, 30).map(([a, b]) => h('div', { class: 'dupe-pair' },
-      h('div', null, h('strong', null, fullName(a)), h('div', { class: 'muted small' }, `${personTeam(a)} · ${a.classYear || '—'} · ${(S.index.get(a.id) || []).length} wks`)),
-      h('div', null, h('strong', null, fullName(b)), h('div', { class: 'muted small' }, `${personTeam(b)} · ${b.classYear || '—'} · ${(S.index.get(b.id) || []).length} wks`)),
+      h('div', null, h('strong', null, fullName(a)), h('div', { class: 'muted small' }, `${meta(a)} · ${(S.index.get(a.id) || []).length} wks`)),
+      h('div', null, h('strong', null, fullName(b)), h('div', { class: 'muted small' }, `${meta(b)} · ${(S.index.get(b.id) || []).length} wks`)),
       h('button', { class: 'btn small', onclick: () => mergeFlow(a, b) }, 'Merge…'))));
   modal('Possible duplicates', body);
 }

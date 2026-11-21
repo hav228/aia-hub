@@ -29,8 +29,12 @@ function inn(v) {
   if (Array.isArray(v)) return v.map(inn);
   const o = {}; for (const [k, x] of Object.entries(v)) o[k] = inn(x); return o;
 }
-const ref = p => doc(db, ...p.split('/'));
-const cref = p => collection(db, ...p.split('/'));
+// All paths are relative to the current ministry (set with setPrefix). A path starting with "/" is absolute.
+let prefix = '';
+export function setPrefix(p) { prefix = p || ''; }
+const full = p => p.startsWith('/') ? p.slice(1) : prefix + p;
+const ref = p => doc(db, ...full(p).split('/'));
+const cref = p => collection(db, ...full(p).split('/'));
 const toObj = d => ({ id: d.id, ...inn(d.data()) });
 function q(path, opts = {}) {
   const c = [];

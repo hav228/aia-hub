@@ -1,9 +1,11 @@
 rules_version = '2';
 // Paste this whole file into Firebase console → Firestore Database → Rules → Publish.
-// Who can do what:
-//   • Approved leaders & staff (listed in the "users" collection, or the owner below): read and write everything.
-//   • Anyone else (attendees, no login): can ONLY add a check-in, only with the right weekly code,
-//     only during that Sunday's check-in window. They can read the team list and nothing else.
+// Two ministries share this database:
+//   • AIA data lives at the top level (people, sundays, ...). AIA leaders are listed in /users.
+//   • Cru data lives under /orgs/cru/... Cru leaders are listed in /orgs/cru/users.
+// Leaders only see their own ministry's data (someone on both lists sees both).
+// Anyone else (attendees, no login) can ONLY add a check-in with that week's code during its check-in window,
+// and read the team list for the dropdown.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -13,39 +15,51 @@ service cloud.firestore {
     function myEmail() { return request.auth.token.email.lower(); }
     // OWNER: change this when handing the app off (also in js/firebase-config.js)
     function isOwner() { return signedIn() && myEmail() == 'hav228@lehigh.edu'; }
-    function isLeader() {
-      return isOwner() || (signedIn()
-        && exists(/databases/$(database)/documents/users/$(myEmail()))
-        && get(/databases/$(database)/documents/users/$(myEmail())).data.active == true);
+    function onList(path) { return exists(path) && get(path).data.active == true; }
+    function isAiaLeader() {
+      return isOwner() || (signedIn() && onList(/databases/$(database)/documents/users/$(myEmail())));
+    }
+    function isOrgLeader(org) {
+      return isOwner() || (signedIn() && onList(/databases/$(database)/documents/orgs/$(org)/users/$(myEmail())));
     }
     function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
 
-    function validCheckin() {
-      let d = request.resource.data;
-      let s = get(/databases/$(database)/documents/sundays/$(d.sundayDate)).data;
+    // d = the new check-in, s = that week's meeting record
+    function validCheckin(d, s) {
       return d.keys().hasOnly(['sundayDate', 'token', 'firstName', 'lastName', 'classYear', 'teamId', 'teamOther', 'phone', 'email', 'status', 'submittedAt'])
         && d.keys().hasAll(['sundayDate', 'token', 'firstName', 'lastName', 'classYear', 'teamId', 'teamOther', 'phone', 'email', 'status', 'submittedAt'])
         && str(d.sundayDate, 10, 10) && str(d.token, 10, 40)
         && str(d.firstName, 1, 40) && str(d.lastName, 1, 40)
         && d.classYear in ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad']
-        && str(d.teamId, 1, 40) && str(d.teamOther, 0, 50)
+        && str(d.teamId, 0, 40) && str(d.teamOther, 0, 50)
         && str(d.phone, 0, 25) && str(d.email, 0, 90)
         && d.status == 'pending' && d.submittedAt == request.time
         && d.token == s.checkinToken && s.status != 'nostudy'
         && request.time >= s.checkinOpensAt && request.time <= s.checkinClosesAt;
     }
 
-    // Leaders & staff: everything
-    match /{document=**} {
-      allow read, write: if isLeader();
+    // ---------- AIA (top level) ----------
+    match /{coll}/{rest=**} {
+      allow read, write: if coll != 'orgs' && isAiaLeader();
     }
-    // Public: the team dropdown on the check-in form
     match /teams/{teamId} {
       allow read: if true;
     }
-    // Public: submit a check-in (cannot read, change or delete any)
     match /checkins/{checkinId} {
-      allow create: if validCheckin();
+      allow create: if validCheckin(request.resource.data,
+        get(/databases/$(database)/documents/sundays/$(request.resource.data.sundayDate)).data);
+    }
+
+    // ---------- Cru (and any future ministry) under /orgs/{org} ----------
+    match /orgs/{org}/{rest=**} {
+      allow read, write: if org == 'cru' && isOrgLeader(org);
+    }
+    match /orgs/{org}/teams/{teamId} {
+      allow read: if true;
+    }
+    match /orgs/{org}/checkins/{checkinId} {
+      allow create: if org == 'cru' && validCheckin(request.resource.data,
+        get(/databases/$(database)/documents/orgs/$(org)/sundays/$(request.resource.data.sundayDate)).data);
     }
   }
 }

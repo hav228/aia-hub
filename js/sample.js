@@ -3,6 +3,7 @@
 import * as fb from './fb.js';
 import { NOW, DELETE } from './fb.js';
 import { S, todayKey, liveSemesters, semesterFor, log, ensureSundays, scheduleId } from './store.js';
+import { ORG } from './org.js';
 import { sundaysBetween, schoolYearOf, schoolYearLabel, addDays, checkinWindow, randomToken, normalizeName } from './logic.js';
 
 const LEADERS = [
@@ -10,12 +11,30 @@ const LEADERS = [
   ['maya.chen@example.com', 'Maya Chen (sample)', 'Leader'],
   ['tyler.brooks@example.com', 'Tyler Brooks (sample)', 'Leader'],
   ['abby.nolan@example.com', 'Abby Nolan (sample)', 'Leader'],
-  ['coach.mark@example.com', 'Mark Davis — AIA staff (sample)', 'Staff'],
+  ['staff.mark@example.com', 'Mark Davis — staff (sample)', 'Staff'],
 ];
 const NAMES = ['Ethan Parker', 'Olivia Bennett', 'Noah Sullivan', 'Ava Mitchell', 'Liam Foster', 'Emma Hayes', 'Mason Reed', 'Sophia Ward',
   'Lucas Gray', 'Isabella Price', 'Owen Murphy', 'Mia Russell', 'Caleb Hughes', 'Grace Coleman', 'Henry Barnes', 'Lily Jenkins',
   'Jack Perry', 'Chloe Powell', 'Wyatt Long', 'Ella Patterson', 'Levi Simmons', 'Avery Butler', 'Carter Flores', 'Zoe Henderson',
   'Isaac Bryant', 'Hannah Griffin', 'Gavin Diaz', 'Leah Myers', 'Eli Ford', 'Nora Hamilton', 'Jude Graham', 'Ruby Wallace'];
+const CRU_NAMES = ['Daniel Kim', 'Sarah Lopez', 'Josh Turner', 'Megan Shaw', 'Andrew Patel', 'Rachel Green', 'Ben Carter', 'Hailey Moore',
+  'Nathan Brooks', 'Emily Tran', 'Sam Wilson', 'Julia Romero', 'Chris Nguyen', 'Katie Ellis', 'Ryan Ortiz', 'Abigail Stone',
+  'Matt Fisher', 'Olivia Park', 'Tyler Reed', 'Sophie Hart', 'David Lee', 'Natalie Cruz', 'Aaron Webb', 'Claire Dunn',
+  'Kevin Shah', 'Lauren Price', 'Jacob Hill', 'Anna Bishop', 'Peter Vance', 'Maddie Rowe', 'Luke Harper', 'Emma Quinn'];
+const CRU_STUDIES = [
+  ['Who Do You Say I Am?', 'Matthew 16:13–20', ['Who do people around campus say Jesus is?', 'Why do you think Jesus asked this directly?', 'How would you answer His question today?']],
+  ['The Prodigal Son', 'Luke 15:11–32', ['Which son do you relate to more, and why?', 'What does the father’s response show us about God?', 'What would “coming home” look like for you?']],
+  ['Do Not Be Anxious', 'Philippians 4:4–9', ['What are you most anxious about this semester?', 'How is thanksgiving connected to peace?', 'What would you think about more if you took verse 8 seriously?']],
+  ['The Good Samaritan', 'Luke 10:25–37', ['Who is your “neighbor” on campus?', 'What keeps us from stopping for others?', 'Who is one person you can serve this week?']],
+  ['Life in Community', 'Acts 2:42–47', ['What stands out about how the early church lived?', 'What would it look like for us to “devote” ourselves together?', 'How can this group grow closer this month?']],
+  ['Rest', 'Matthew 11:28–30', ['When was the last time you truly rested?', 'What weighs you down right now?', 'What would taking Jesus’ yoke look like during finals?']],
+  ['Salt and Light', 'Matthew 5:13–16', ['Where is your “lampstand” on campus?', 'What makes salt lose its saltiness?', 'How can we let our light shine without being preachy?']],
+  ['New Creation', '2 Corinthians 5:17–21', ['What does it mean to be a new creation?', 'What old things are hard to let go of?', 'How are we “ambassadors” in our friend groups?']],
+  ['The Vine and the Branches', 'John 15:1–11', ['What does “abiding” look like in a busy week?', 'Where have you seen fruit in your life?', 'What pruning might God be doing right now?']],
+  ['Faith Over Fear', 'Joshua 1:1–9', ['What new challenge are you facing like Joshua?', 'Why does God repeat “be strong and courageous”?', 'How does God’s presence change how we face it?']],
+  ['Do Everything in Love', '1 Corinthians 13', ['Which description of love is hardest for you?', 'How is this different from how love is usually described?', 'Who can you love this way this week?']],
+  ['Running the Race', 'Hebrews 12:1–3', ['What slows you down in your faith?', 'What does it mean to fix your eyes on Jesus?', 'Who is in your “great cloud of witnesses”?']],
+];
 const PERSONAS = [...Array(10).fill('regular'), ...Array(6).fill('occasional'), ...Array(4).fill('dropping'), ...Array(3).fill('cold'), ...Array(4).fill('new'), ...Array(5).fill('potential')];
 const YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Grad'];
 const STUDIES = [
@@ -56,7 +75,7 @@ export async function loadSampleData(progress = () => {}) {
     if (liveSemesters().some(s => s.startDate <= w.endDate && s.endDate >= w.startDate)) continue;
     const id = fb.newId('semesters');
     ops.push({ type: 'set', path: `semesters/${id}`, data: { ...w, schoolYear: schoolYearLabel(schoolYearOf(w.startDate)), deleted: false, sample: true, createdAt: NOW } });
-    for (const k of sundaysBetween(w.startDate, w.endDate)) {
+    for (const k of sundaysBetween(w.startDate, w.endDate, ORG.day)) {
       if (S.sundays.some(s => s.date === k)) continue;
       const win = checkinWindow(k, S.settings);
       newSundays.push(k);
@@ -74,11 +93,12 @@ export async function loadSampleData(progress = () => {}) {
 
   // 3. people + attendance
   progress('Adding sample athletes and attendance…');
-  const teams = S.teams.filter(t => t.active !== false);
-  const people = NAMES.map((full, i) => {
+  const teams = ORG.hasTeams ? S.teams.filter(t => t.active !== false) : [];
+  const people = (ORG.hasTeams ? NAMES : CRU_NAMES).map((full, i) => {
     const [firstName, lastName] = full.split(' ');
     const team = teams[(i * 7) % Math.max(1, teams.length)];
-    return { id: fb.newId('people'), persona: PERSONAS[i], firstName, lastName, classYear: YEARS[i % 5 === 4 && i % 3 ? 3 : i % 4], teamId: team?.id || 'other', teamOther: team ? '' : 'Sample team' };
+    return { id: fb.newId('people'), persona: PERSONAS[i], firstName, lastName, classYear: YEARS[i % 5 === 4 && i % 3 ? 3 : i % 4],
+      teamId: !ORG.hasTeams ? '' : team?.id || 'other', teamOther: !ORG.hasTeams || team ? '' : 'Sample team' };
   });
   for (const p of people) {
     ops.push({ type: 'set', path: `people/${p.id}`, data: {
@@ -101,7 +121,7 @@ export async function loadSampleData(progress = () => {}) {
   progress('Adding outreach notes…');
   const leaderEmails = [S.user.email, ...LEADERS.map(l => l[0])];
   const methods = ['Text', 'Coffee / meal', 'In person', 'Call', 'Text'];
-  const notes = ['Checked in after the game — doing well, coming Sunday.', 'Got lunch at Hawk’s Nest. Asked good questions about faith.', 'Busy with midterms, said he’d try to make it.',
+  const notes = [ORG.hasTeams ? 'Checked in after the game — doing well, coming Sunday.' : 'Caught up after class — doing well, coming Thursday.', 'Got lunch at Hawk’s Nest. Asked good questions about faith.', 'Busy with midterms, said he’d try to make it.',
     'Prayed together about her injury recovery.', 'Invited a teammate to come along next week.', 'Hasn’t been in a while — sent an encouraging text.'];
   const targets = people.filter(p => ['dropping', 'cold', 'new', 'potential', 'occasional'].includes(p.persona)).slice(0, 14);
   targets.forEach((p, i) => {
@@ -120,7 +140,7 @@ export async function loadSampleData(progress = () => {}) {
     [B([1, 3, 5], '08:00', '11:00', 'Classes', 'Class'), B([1, 2, 3, 4, 5], '14:00', '17:00', 'Practice', 'Practice'), B([3], '19:00', '21:00', 'Lab', 'Class')],
     [B([2, 4], '09:00', '12:00', 'Classes', 'Class'), B([1, 2, 3, 4, 5], '06:00', '08:00', 'Morning practice', 'Practice'), B([5], '17:00', '22:00', 'Work', 'Work')],
     [B([1, 3], '13:00', '16:00', 'Classes', 'Class'), B([1, 2, 3, 4], '16:30', '19:00', 'Practice', 'Practice'), B([6], '10:00', '16:00', 'Games', 'Game')],
-    [B([1, 2, 3, 4, 5], '08:30', '16:30', 'AIA office / campus', 'Work'), B([2], '18:00', '19:30', 'Staff meeting', 'Meeting')],
+    [B([1, 2, 3, 4, 5], '08:30', '16:30', 'Office / campus', 'Work'), B([2], '18:00', '19:30', 'Staff meeting', 'Meeting')],
   ];
   if (sem) LEADERS.forEach(([email], i) => ops.push({ type: 'set', path: `schedules/${scheduleId(sem.id, email)}`, data: { semesterId: sem.id, userEmail: email, blocks: plans[i], sample: true, updatedAt: NOW, updatedBy: S.user.email } }));
   ops.push({ type: 'set', path: `scheduleExceptions/${fb.newId('x')}`, data: { userEmail: LEADERS[0][0], label: 'Away game (sample)', type: 'busy', startDate: addDays(today, 3), endDate: addDays(today, 4), allDay: true, start: '', end: '', deleted: false, sample: true, createdAt: NOW } });
@@ -134,7 +154,8 @@ export async function loadSampleData(progress = () => {}) {
   studyDays.forEach((k, i) => {
     const s = S.sundays.find(x => x.date === k);
     if (s && (s.plan?.title || s.leaderEmail)) return;
-    const [title, scripture, questions] = STUDIES[i % STUDIES.length];
+    const list = ORG.hasTeams ? STUDIES : CRU_STUDIES;
+    const [title, scripture, questions] = list[i % list.length];
     ops.push({ type: 'update', path: `sundays/${k}`, data: { leaderEmail: rot[i % rot.length], plan: { title, scripture, questions, notes: 'Sample notes: open with a short story from the week, then read the passage twice.',
       links: [{ label: 'Leader guide (sample link)', url: 'https://docs.google.com/document/', type: 'Google Doc' }] }, planSample: true, planUpdatedAt: NOW, planUpdatedBy: rot[i % rot.length] } });
     if (i % 4 === 1) commentOps.push({ type: 'set', path: `sundays/${k}/comments/${fb.newId('c')}`, data: { text: 'Great passage for this week — I can bring snacks.', by: LEADERS[1][0], byName: LEADERS[1][1], at: NOW, sample: true } });

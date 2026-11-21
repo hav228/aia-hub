@@ -1,7 +1,8 @@
 import * as fb from './fb.js';
-import { S, start, stop, onChange, checkAccess } from './store.js';
+import { S, stop, onChange, checkAccess, switchOrg, preferredOrg, orgChoices } from './store.js';
+import { ORG } from './org.js';
 import { h, modalState, toast, formState } from './ui.js';
-import { GROUP_NAME, firebaseConfig } from './firebase-config.js';
+import { firebaseConfig } from './firebase-config.js';
 import { renderWeek } from './pages/week.js';
 import { renderPeople, renderPerson } from './pages/people.js';
 import { renderReview } from './pages/review.js';
@@ -18,8 +19,8 @@ const routes = {
   week: renderWeek, people: renderPeople, person: renderPerson, review: renderReview,
   outreach: renderOutreach, schedules: renderSchedules, studies: renderStudies, study: renderStudy, reports: renderReports, settings: renderSettings, more: renderMore, activity: renderActivity, trash: renderTrash,
 };
-const NAV = [
-  ['week', 'This Week', '📅'], ['studies', 'Studies', '📖'], ['people', 'People', '👥'], ['outreach', 'Outreach', '💬'], ['reports', 'Reports', '📊'], ['more', 'More', '☰'],
+const NAV = () => [
+  ['week', 'This Week', '📅'], ['studies', ORG.plansNav, '📖'], ['people', 'People', '👥'], ['outreach', 'Outreach', '💬'], ['reports', 'Reports', '📊'], ['more', 'More', '☰'],
 ];
 
 export function parseRoute() {
@@ -30,16 +31,24 @@ export function parseRoute() {
 
 function shell(content, routeName) {
   const reviewCount = S.review.length;
-  const nav = h('nav', { class: 'nav', 'aria-label': 'Main' }, NAV.map(([r, label, icon]) => {
+  const nav = h('nav', { class: 'nav', 'aria-label': 'Main' }, NAV().map(([r, label, icon]) => {
     const active = r === routeName || (r === 'people' && routeName === 'person') || (r === 'studies' && routeName === 'study') || (r === 'more' && ['settings', 'activity', 'trash', 'schedules', 'review'].includes(routeName));
     return h('a', { href: `#/${r}`, class: active ? 'active' : '', 'aria-current': active ? 'page' : null },
       h('span', { class: 'nav-icon', 'aria-hidden': 'true' }, icon), h('span', null, label),
       r === 'more' && reviewCount ? h('span', { class: 'badge', 'aria-label': `${reviewCount} to review` }, reviewCount) : null);
   }));
   return [
-    h('header', { class: 'topbar' }, h('div', { class: 'brand' }, h('span', { class: 'logo' }, 'AIA'), GROUP_NAME), nav),
+    h('header', { class: `topbar org-${ORG.key}` }, h('div', { class: 'brand' }, h('span', { class: 'logo' }, ORG.short), h('span', { class: 'brand-name' }, ORG.name), orgSwitcher()), nav),
     h('main', { id: 'main' }, content),
   ];
+}
+
+function orgSwitcher() {
+  const orgs = orgChoices();
+  if (orgs.length < 2) return null;
+  return h('div', { class: 'org-switch', role: 'group', 'aria-label': 'Ministry' }, orgs.map(o =>
+    h('button', { type: 'button', class: o.key === ORG.key ? 'on' : '', 'aria-pressed': o.key === ORG.key ? 'true' : 'false',
+      onclick: () => { if (o.key === ORG.key) return; switchOrg(o.key); render(true); } }, o.short)));
 }
 
 let renderTimer = null, pendingRender = false, lastRouteKey = '';
@@ -61,6 +70,7 @@ export function render(force = false) {
     try { content = routes[name](...args); }
     catch (e) { console.error(e); content = h('div', { class: 'card error' }, 'Something went wrong on this page: ', e.message); }
   }
+  document.body.dataset.org = ORG.key;
   root.replaceChildren(...shell(content, name));
   window.scrollTo(0, scroll);
 }
@@ -73,8 +83,8 @@ onChange(scheduleRender);
 
 function loginScreen(msg) {
   root.replaceChildren(h('div', { class: 'login' },
-    h('div', { class: 'logo big' }, 'AIA'),
-    h('h1', null, `${GROUP_NAME} Leaders`),
+    h('div', { class: 'logo big' }, 'AIA · Cru'),
+    h('h1', null, 'Lehigh Leaders Hub'),
     h('p', null, 'Sign in with the Google account a leader added for you (your Lehigh email works).'),
     msg ? h('p', { class: 'warn' }, msg) : null,
     h('button', { class: 'btn primary big', onclick: async () => {
@@ -92,11 +102,11 @@ if (String(firebaseConfig.apiKey).includes('PASTE')) {
   let ok = false;
   try { ok = await checkAccess(user); } catch (e) { console.error(e); }
   if (!ok) {
-    loginScreen(`${user.email} isn’t on the leader list yet. Ask a leader to add you in More → Settings → Leaders & staff, then try again.`);
+    loginScreen(`${user.email} isn’t on the AIA or Cru leader list yet. Ask a leader to add you in More → Settings → Leaders & staff, then try again.`);
     root.querySelector('.login').append(h('button', { class: 'btn', onclick: () => fb.signOut() }, 'Use a different account'));
     return;
   }
-  start();
+  switchOrg(preferredOrg());
   render(true);
 });
 

@@ -1,3 +1,4 @@
+import { ORG } from '../org.js';
 import { h, card, empty, fmtDate, fmtLong, fmtDateTime, toast, confirmBox, modal, select, field, go, markClean } from '../ui.js';
 import {
   S, todayKey, liveSemesters, semesterFor, sundayByDate, activeUsers, userName, savePlan, setLeader, applyRotation,
@@ -18,7 +19,7 @@ export function renderStudies(tab) {
   if (tab === 'archive' || tab === 'upcoming') view.tab = tab;
   const tabs = h('div', { class: 'tabs' }, [['upcoming', 'Upcoming'], ['archive', 'Archive']].map(([k, l]) =>
     h('a', { href: `#/studies/${k}`, class: k === view.tab ? 'active' : '' }, l)));
-  const head = h('div', { class: 'page-head' }, h('h1', null, 'Sunday Studies'));
+  const head = h('div', { class: 'page-head' }, h('h1', null, ORG.plansTitle));
   if (!liveSemesters().length) return [head, card(null, empty('Add a semester in Settings first.'))];
   return [head, tabs, view.tab === 'archive' ? archive() : upcoming()];
 }
@@ -36,9 +37,9 @@ function upcoming() {
     const sem = semesterFor(list[0]?.date || today);
     const pool = S.sundays.filter(s => s.date >= today && (!sem || s.semesterId === sem.id));
     const plan = rotationPlan(pool, leaders.map(u => u.email));
-    if (!plan.length) { toast('Every upcoming Sunday already has a leader'); return; }
+    if (!plan.length) { toast(`Every upcoming ${ORG.dayName} already has a leader`); return; }
     modal('Fill in the rotation?', h('div', null,
-      h('p', null, `This assigns leaders in turn (${leaders.map(u => u.name || u.email).join(' → ')}) to the ${plan.length} Sunday${plan.length > 1 ? 's' : ''} that don’t have one yet${sem ? ` in ${sem.name}` : ''}. Sundays that already have a leader stay the same.`),
+      h('p', null, `This assigns leaders in turn (${leaders.map(u => u.name || u.email).join(' → ')}) to the ${plan.length} ${ORG.dayName}${plan.length > 1 ? 's' : ''} that don’t have one yet${sem ? ` in ${sem.name}` : ''}. ${ORG.dayName}s that already have a leader stay the same.`),
       h('ul', { class: 'small' }, plan.map(a => h('li', null, `${shortD(a.date)} — ${userName(a.leaderEmail)}`)))), [
       { label: 'Cancel' },
       { label: 'Assign', kind: 'primary', onClick: async () => { await applyRotation(plan); toast('Leaders assigned'); } },
@@ -57,11 +58,11 @@ function upcoming() {
       return h('div', { class: `study-row${s.status === 'nostudy' ? ' nostudy' : ''}` },
         h('a', { href: `#/study/${s.date}`, class: 'study-main' },
           h('div', { class: 'study-date' }, shortD(s.date), s.date === today ? h('span', { class: 'tag new' }, 'Tonight') : null),
-          s.status === 'nostudy' ? h('div', { class: 'muted' }, 'No study this week')
-            : hasPlan(s) ? [h('strong', null, p.title || 'Untitled study'), p.scripture ? h('div', { class: 'muted small' }, p.scripture) : null]
+          s.status === 'nostudy' ? h('div', { class: 'muted' }, `${ORG.noMeeting} this week`)
+            : hasPlan(s) ? [h('strong', null, p.title || 'Untitled'), p.scripture ? h('div', { class: 'muted small' }, p.scripture) : null]
               : h('div', { class: 'muted' }, 'No plan yet — tap to add')),
         s.status === 'nostudy' ? null : sel);
-    })) : card(null, empty('No upcoming Sundays. Add next semester in Settings.')));
+    })) : card(null, empty(`No upcoming ${ORG.dayName}s. Add next semester in Settings.`)));
 }
 
 // ---------- archive ----------
@@ -77,7 +78,7 @@ function archive() {
     out.replaceChildren(rows.length ? h('div', { class: 'study-list' }, rows.map(s => h('a', { class: 'study-row', href: `#/study/${s.date}` },
       h('div', { class: 'study-main' },
         h('div', { class: 'study-date' }, fmtDate(s.date, { month: 'short', day: 'numeric', year: 'numeric' })),
-        h('strong', null, s.plan.title || 'Untitled study'),
+        h('strong', null, s.plan.title || 'Untitled'),
         h('div', { class: 'muted small' }, [s.plan.scripture, s.leaderEmail ? `led by ${userName(s.leaderEmail)}` : null, `${Object.keys(s.attendees || {}).length} attended`].filter(Boolean).join(' · ')))))) :
       empty(view.q ? 'No studies match that search.' : 'Past studies with plans will show up here.'));
   };
@@ -91,13 +92,13 @@ function archive() {
 export function renderStudy(k) {
   const s = sundayByDate(k);
   const back = h('a', { class: 'btn icon', href: `#/studies/${k < todayKey() ? 'archive' : 'upcoming'}`, 'aria-label': 'Back' }, '‹');
-  if (!s) return [h('div', { class: 'page-head' }, back, h('h1', null, 'Study not found')), card(null, empty('That Sunday isn’t in a semester.'))];
+  if (!s) return [h('div', { class: 'page-head' }, back, h('h1', null, 'Study not found')), card(null, empty(`That ${ORG.dayName} isn’t in a semester.`))];
   watchComments(k);
   const editing = view.editing === k;
   return [
     h('div', { class: 'page-head' }, back, h('div', { class: 'grow' }, h('div', { class: 'muted small' }, fmtLong(k)), h('h1', null, s.plan?.title || (editing ? 'Study plan' : 'No plan yet'))),
       editing ? null : h('button', { class: 'btn primary', onclick: () => { view.editing = k; window.dispatchEvent(new HashChangeEvent('hashchange')); } }, hasPlan(s) ? 'Edit' : 'Add plan')),
-    s.status === 'nostudy' ? h('p', { class: 'pill muted' }, 'This Sunday is marked “No study”.') : null,
+    s.status === 'nostudy' ? h('p', { class: 'pill muted' }, `This ${ORG.dayName} is marked “${ORG.noMeeting}”.`) : null,
     h('div', { class: 'grid2' },
       h('div', null, editing ? planForm(s) : planView(s)),
       h('div', null, commentsCard(k), historyCard(k), k <= todayKey() ? card(null, h('a', { href: `#/reports/week/${k}` }, `${Object.keys(s.attendees || {}).length} attended — see the weekly report →`)) : null)),

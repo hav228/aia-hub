@@ -1,3 +1,4 @@
+import { ORG } from '../org.js';
 import { h, card, empty, fmtLong, fmtDate, fmtDateTime, toast, confirmBox, drawQR, downloadFile, go } from '../ui.js';
 import {
   S, todayKey, sundayByDate, userName, semesterFor, liveSemesters, peopleById, setSundayStatus, openCheckinNow,
@@ -8,34 +9,34 @@ import { pickPerson, statTile, teamBars } from './common.js';
 
 export function checkinUrl(s) {
   const u = new URL('checkin.html', location.href.split('#')[0]);
-  u.search = ''; u.searchParams.set('d', s.date); u.searchParams.set('t', s.checkinToken);
+  u.search = ''; if (ORG.key !== 'aia') u.searchParams.set('o', ORG.key); u.searchParams.set('d', s.date); u.searchParams.set('t', s.checkinToken);
   return u.toString();
 }
 
 function windowStatus(s) {
   const now = new Date();
-  if (s.status === 'nostudy') return ['No study this week', 'muted'];
+  if (s.status === 'nostudy') return [`${ORG.noMeeting} this week`, 'muted'];
   if (now < s.checkinOpensAt) return [`Check-in opens ${fmtDateTime(s.checkinOpensAt)}`, 'muted'];
   if (now <= s.checkinClosesAt) return [`Check-in is OPEN until ${fmtDateTime(s.checkinClosesAt)}`, 'good'];
   return [`Check-in closed ${fmtDateTime(s.checkinClosesAt)}`, 'muted'];
 }
 
 export function renderWeek(dateArg) {
-  const k = dateArg && isSunday(dateArg) ? dateArg : currentSundayKey(new Date(), S.settings);
+  const k = dateArg && isSunday(dateArg, ORG.day) ? dateArg : currentSundayKey(new Date(), S.settings, ORG.day);
   const s = sundayByDate(k);
   const sem = semesterFor(k);
   const head = h('div', { class: 'week-nav' },
-    h('a', { class: 'btn icon', href: `#/week/${addDays(k, -7)}`, 'aria-label': 'Previous Sunday' }, '‹'),
+    h('a', { class: 'btn icon', href: `#/week/${addDays(k, -7)}`, 'aria-label': `Previous ${ORG.dayName}` }, '‹'),
     h('div', { class: 'week-title' }, h('h1', null, fmtLong(k)), h('div', { class: 'muted' }, sem ? sem.name : 'Not in a semester')),
-    h('a', { class: 'btn icon', href: `#/week/${addDays(k, 7)}`, 'aria-label': 'Next Sunday' }, '›'));
+    h('a', { class: 'btn icon', href: `#/week/${addDays(k, 7)}`, 'aria-label': `Next ${ORG.dayName}` }, '›'));
 
   if (!liveSemesters().length) {
     return [head, card('Welcome! First step: add your semester dates',
-      h('p', null, 'The app creates a check-in QR code for every Sunday inside your semesters.'),
+      h('p', null, `The app creates a check-in QR code for every ${ORG.dayName} inside your semesters.`),
       h('a', { class: 'btn primary', href: '#/settings' }, 'Go to Settings'))];
   }
   if (!s) {
-    return [head, card(null, empty('This Sunday isn’t inside a semester, so it has no check-in code. You can change semester dates in More → Settings.'),
+    return [head, card(null, empty(`This ${ORG.dayName} isn’t inside a semester, so it has no check-in code. You can change semester dates in More → Settings.`),
       h('a', { class: 'btn', href: `#/week` }, 'Back to this week'))];
   }
 
@@ -46,19 +47,19 @@ export function renderWeek(dateArg) {
 
   const qrCard = card(null,
     h('div', { class: `pill ${statusKind}` }, statusText),
-    s.status === 'nostudy' ? h('p', { class: 'muted' }, 'This week is marked “No study”, so it won’t count in averages and the code won’t accept check-ins.') : canvas,
+    s.status === 'nostudy' ? h('p', { class: 'muted' }, `This week is marked “${ORG.noMeeting}”, so it won’t count in averages and the code won’t accept check-ins.`) : canvas,
     h('div', { class: 'linkbox' }, h('input', { value: url, readonly: true, 'aria-label': 'Check-in link', onfocus: e => e.target.select() })),
     h('div', { class: 'btn-row' },
       h('button', { class: 'btn', onclick: () => navigator.clipboard.writeText(url).then(() => toast('Link copied')) }, 'Copy link'),
-      h('button', { class: 'btn', onclick: () => canvas.toBlob(b => downloadFile(`AIA-checkin-${k}.png`, b)) }, 'Download QR'),
+      h('button', { class: 'btn', onclick: () => canvas.toBlob(b => downloadFile(`${ORG.short}-checkin-${k}.png`, b)) }, 'Download QR'),
       h('button', { class: 'btn', onclick: () => printQR(k, url) }, 'Print'),
       h('a', { class: 'btn', href: url, target: '_blank', rel: 'noopener' }, 'Open form')),
     h('details', { class: 'more-actions' }, h('summary', null, 'More options'),
       h('div', { class: 'btn-row' },
         h('button', { class: 'btn', onclick: async () => { await openCheckinNow(k, 2); toast('Check-in open for the next 2 hours'); } }, 'Open check-in now (2 hrs)'),
-        h('button', { class: 'btn', onclick: async () => { await resetCheckinWindow(k); toast('Back to the normal Sunday window'); } }, 'Reset to normal time'),
+        h('button', { class: 'btn', onclick: async () => { await resetCheckinWindow(k); toast(`Back to the normal ${ORG.dayName} window`); } }, 'Reset to normal time'),
         h('button', { class: 'btn', onclick: () => setSundayStatus(k, s.status === 'nostudy' ? 'scheduled' : 'nostudy') },
-          s.status === 'nostudy' ? 'We ARE meeting this week' : 'Mark as “No study”'),
+          s.status === 'nostudy' ? 'We ARE meeting this week' : `Mark as “${ORG.noMeeting}”`),
         h('button', { class: 'btn danger-outline', onclick: async () => {
           if (await confirmBox('Make a new QR code?', 'The old code and link will stop working. Only do this if the link got shared somewhere it shouldn’t be.', 'Make new code', true)) { await newQrToken(k); toast('New code made'); }
         } }, 'New QR code'))));
@@ -80,26 +81,26 @@ export function renderWeek(dateArg) {
     h('a', { class: 'btn', href: `#/reports/week/${k}` }, 'Full report')),
     rep.attendees.length ? h('ul', { class: 'att-list' }, rep.attendees.map(a => h('li', null,
       h('a', { href: `#/person/${a.pid}` }, h('strong', null, a.name)),
-      h('span', { class: 'muted' }, ` ${a.team} · ${a.classYear}`),
+      h('span', { class: 'muted' }, ` ${[a.team, a.classYear].filter(Boolean).join(' · ')}`),
       a.isNew ? h('span', { class: 'tag new' }, 'New') : null,
       a.source === 'manual' ? h('span', { class: 'tag' }, 'Added by leader') : null,
       h('button', { class: 'icon-btn', 'aria-label': `Remove ${a.name}`, onclick: async () => {
         const p = pmap.get(a.pid) || { id: a.pid, firstName: a.name, lastName: '' };
         if (await confirmBox('Remove from this week?', `Remove ${a.name} from ${fmtDate(k)}?`, 'Remove', true)) await removeAttendance(k, p);
       } }, '×')))) : empty('No one checked in yet.'),
-    rep.byTeam.length ? [h('h3', null, 'By team'), teamBars(rep.byTeam)] : null);
+    ORG.hasTeams && rep.byTeam.length ? [h('h3', null, 'By team'), teamBars(rep.byTeam)] : rep.byClass.length ? [h('h3', null, 'By class year'), teamBars(rep.byClass)] : null);
 
   const p = s.plan || {};
   const planCard = s.status === 'nostudy' ? null : h('a', { class: 'card plan-strip', href: `#/study/${k}` },
     h('div', { class: 'muted small' }, s.leaderEmail ? `Led by ${userName(s.leaderEmail)}` : 'No leader assigned yet'),
-    hasPlan(s) ? [h('strong', null, p.title || 'Untitled study'), p.scripture ? h('span', { class: 'muted' }, ` · ${p.scripture}`) : null] : h('span', null, 'No study plan yet — tap to add one'),
+    hasPlan(s) ? [h('strong', null, p.title || 'Untitled'), p.scripture ? h('span', { class: 'muted' }, ` · ${p.scripture}`) : null] : h('span', null, 'No plan yet — tap to add one'),
     h('span', { class: 'plan-go' }, '›'));
   return [head, planCard, h('div', { class: 'grid2' }, qrCard, attCard)];
 }
 
 function printQR(k, url) {
   const sheet = h('div', { id: 'print-sheet' },
-    h('h1', null, 'AIA Sunday Night'), h('h2', null, fmtLong(k)),
+    h('h1', null, `${ORG.short} ${ORG.dayName} Night`), h('h2', null, fmtLong(k)),
     drawQR(h('canvas', { class: 'qr-print' }), url, 900),
     h('p', { class: 'big' }, 'Scan to check in'), h('p', { class: 'small' }, url));
   document.body.append(sheet); document.body.classList.add('printing');
