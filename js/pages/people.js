@@ -22,7 +22,7 @@ export function renderPeople() {
     list.replaceChildren(...(rows.length ? rows.map(p => {
       const dates = S.index.get(p.id) || [];
       return h('a', { class: 'person-row', href: `#/person/${p.id}` },
-        h('div', null, h('strong', null, fullName(p)), G.get(p.id) ? h('span', { class: `tag g-${G.get(p.id).group}` }, groupLabel(G.get(p.id).group)) : null),
+        h('div', null, h('strong', null, fullName(p)), p.sample ? h('span', { class: 'tag' }, 'Sample') : null, G.get(p.id) ? h('span', { class: `tag g-${G.get(p.id).group}` }, groupLabel(G.get(p.id).group)) : null),
         h('div', { class: 'muted small' }, `${personTeam(p)} · ${p.classYear || '—'} · ${dates.length} week${dates.length === 1 ? '' : 's'}${dates.length ? ` · last ${fmtDate(dates[dates.length - 1], { month: 'short', day: 'numeric' })}` : ''}`));
     }) : [empty('No one matches.')]));
   };

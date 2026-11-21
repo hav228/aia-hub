@@ -24,7 +24,7 @@ export function personForm(p = {}) {
   const otherWrap = field('Other team', f.teamOther);
   const syncOther = () => (otherWrap.style.display = f.teamId.value === 'other' ? '' : 'none');
   f.teamId.addEventListener('change', syncOther); syncOther();
-  const el = h('div', { class: 'form' },
+  const el = h('div', { class: 'form', 'data-form': '' },
     h('div', { class: 'row2' }, field('First name', f.firstName), field('Last name', f.lastName)),
     h('div', { class: 'row2' }, field('Class year', f.classYear), field('Team', f.teamId)),
     otherWrap,

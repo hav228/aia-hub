@@ -5,24 +5,26 @@ import {
 } from '../store.js';
 import { DEFAULT_SETTINGS, schoolYearOf, schoolYearLabel, sundaysBetween } from '../logic.js';
 import { OWNER_EMAIL } from '../firebase-config.js';
+import { loadSampleData, removeSampleData } from '../sample.js';
 
 export function renderMore() {
   const link = (href, title, sub) => h('a', { class: 'more-link', href }, h('strong', null, title), h('span', { class: 'muted small' }, sub));
   return [h('h1', null, 'More'),
     card(null,
+      link('#/review', `Review check-ins${S.review.length ? ` (${S.review.length} waiting)` : ''}`, 'Check-ins that might be someone already in the list'),
       link('#/schedules', 'Schedules', 'Everyone’s weekly schedule and “Find a time” for meetings'),
       link('#/schedules/find', 'Find a time', 'See when a group of leaders and staff are all free'),
       link('#/settings', 'Settings', 'Semesters, teams, leader logins, check-in times, thresholds'),
       link('#/activity', 'Activity log', 'Who changed what, and when'),
       link('#/trash', 'Trash', 'Restore anything deleted in the last 90 days')),
-    card('Coming in the next phase', h('p', { class: 'muted' }, 'Study plans')),
+    
     card(null, h('p', { class: 'muted small' }, `Signed in as ${S.user.email}`),
       h('button', { class: 'btn', onclick: () => fb.signOut() }, 'Sign out'))];
 }
 
 export function renderSettings() {
   return [h('div', { class: 'page-head' }, h('a', { class: 'btn icon', href: '#/more', 'aria-label': 'Back' }, '‹'), h('h1', null, 'Settings')),
-    semestersCard(), usersCard(), checkinCard(), thresholdsCard(), teamsCard(), backupCard()];
+    semestersCard(), usersCard(), checkinCard(), thresholdsCard(), teamsCard(), backupCard(), sampleCard()];
 }
 
 // ---------- semesters ----------
@@ -101,10 +103,10 @@ function checkinCard() {
   const s = S.settings;
   const open = h('input', { type: 'time', value: s.checkinOpen });
   const close = h('input', { type: 'time', value: s.checkinClose });
-  return card('Check-in times',
+  return h('div', { 'data-form': '' }, card('Check-in times',
     h('p', { class: 'muted small' }, 'Each week’s QR code only accepts check-ins during this window. If the close time is earlier than the open time, it means Monday morning.'),
     h('div', { class: 'row2' }, field('Opens Sunday at', open), field('Closes at', close)),
-    h('button', { class: 'btn primary', onclick: async () => { await saveSettings({ checkinOpen: open.value, checkinClose: close.value }); toast('Saved — upcoming Sundays updated'); } }, 'Save times'));
+    h('button', { class: 'btn primary', onclick: async () => { await saveSettings({ checkinOpen: open.value, checkinClose: close.value }); toast('Saved — upcoming Sundays updated'); } }, 'Save times')));
 }
 
 // ---------- thresholds ----------
@@ -119,7 +121,7 @@ function thresholdsCard() {
     typicalAttendance: h('input', { type: 'number', min: 0, value: s.typicalAttendance, class: 'small-num' }),
   };
   const line = (...parts) => h('p', { class: 'inline-field' }, parts);
-  return card('Report & outreach rules',
+  return h('div', { 'data-form': '' }, card('Report & outreach rules',
     h('h3', null, 'Reports'),
     line('Flag weeks more than ', inputs.inconsistentPct, '% above or below the average as “inconsistent”.'),
     line('“Attendance dropping” looks at the last ', inputs.dropRecentWeeks, ' studies.'),
@@ -139,7 +141,7 @@ function thresholdsCard() {
       h('button', { class: 'btn', onclick: async () => {
         const { checkinOpen, checkinClose, staffCount, typicalAttendance, ...rules } = DEFAULT_SETTINGS;
         await saveSettings(rules); toast('Back to defaults');
-      } }, 'Reset to defaults')));
+      } }, 'Reset to defaults'))));
 }
 
 // ---------- teams ----------
@@ -172,4 +174,26 @@ function backupCard() {
         downloadFile(`AIA-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(data, null, 1), 'application/json');
       } finally { e.target.disabled = false; e.target.textContent = 'Download full backup'; }
     } }, 'Download full backup'));
+}
+
+// ---------- sample data ----------
+function sampleCard() {
+  const hasSample = S.people.some(p => p.sample) || S.users.some(u => u.sample);
+  const status = h('p', { class: 'muted small', 'aria-live': 'polite' });
+  const run = (fn, done) => async e => {
+    const btns = e.target.closest('.card').querySelectorAll('button'); btns.forEach(b => (b.disabled = true));
+    try { const r = await fn(t => (status.textContent = t)); status.textContent = ''; toast(done(r)); }
+    catch (err) { console.error(err); status.textContent = ''; toast(err.message || 'Something went wrong', 'err'); }
+    finally { btns.forEach(b => (b.disabled = false)); }
+  };
+  return card('Sample data',
+    h('p', { class: 'muted small' }, 'Fills the app with made-up athletes, attendance, outreach notes, schedules and study plans so you can see how everything works. Every sample item is tagged, so one click removes all of it and leaves your real data alone. Sample leaders use @example.com emails, which can’t sign in.'),
+    hasSample ? h('p', { class: 'pill' }, 'Sample data is loaded') : null,
+    h('div', { class: 'btn-row' },
+      hasSample ? null : h('button', { class: 'btn', onclick: run(loadSampleData, () => 'Sample data loaded') }, 'Load sample data'),
+      h('button', { class: `btn ${hasSample ? 'danger' : 'danger-outline'}`, onclick: async e => {
+        if (!(await confirmBox('Remove all sample data?', 'This deletes every sample person, attendance mark, outreach note, schedule, study plan and sample leader. Your real data stays.', 'Remove sample data', true))) return;
+        await run(removeSampleData, n => `Removed ${n} sample items`)(e);
+      } }, 'Remove sample data')),
+    status);
 }

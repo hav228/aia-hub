@@ -1,6 +1,6 @@
 import * as fb from './fb.js';
 import { S, start, stop, onChange, checkAccess } from './store.js';
-import { h, modalState, toast } from './ui.js';
+import { h, modalState, toast, formState } from './ui.js';
 import { GROUP_NAME, firebaseConfig } from './firebase-config.js';
 import { renderWeek } from './pages/week.js';
 import { renderPeople, renderPerson } from './pages/people.js';
@@ -11,14 +11,15 @@ import { renderActivity } from './pages/activity.js';
 import { renderTrash } from './pages/trash.js';
 import { renderOutreach } from './pages/outreach.js';
 import { renderSchedules } from './pages/schedules.js';
+import { renderStudies, renderStudy } from './pages/studies.js';
 
 const root = document.getElementById('app');
 const routes = {
   week: renderWeek, people: renderPeople, person: renderPerson, review: renderReview,
-  outreach: renderOutreach, schedules: renderSchedules, reports: renderReports, settings: renderSettings, more: renderMore, activity: renderActivity, trash: renderTrash,
+  outreach: renderOutreach, schedules: renderSchedules, studies: renderStudies, study: renderStudy, reports: renderReports, settings: renderSettings, more: renderMore, activity: renderActivity, trash: renderTrash,
 };
 const NAV = [
-  ['week', 'This Week', '📅'], ['people', 'People', '👥'], ['outreach', 'Outreach', '💬'], ['reports', 'Reports', '📊'], ['review', 'Review', '✅'], ['more', 'More', '☰'],
+  ['week', 'This Week', '📅'], ['studies', 'Studies', '📖'], ['people', 'People', '👥'], ['outreach', 'Outreach', '💬'], ['reports', 'Reports', '📊'], ['more', 'More', '☰'],
 ];
 
 export function parseRoute() {
@@ -30,10 +31,10 @@ export function parseRoute() {
 function shell(content, routeName) {
   const reviewCount = S.review.length;
   const nav = h('nav', { class: 'nav', 'aria-label': 'Main' }, NAV.map(([r, label, icon]) => {
-    const active = r === routeName || (r === 'people' && routeName === 'person') || (r === 'more' && ['settings', 'activity', 'trash', 'schedules'].includes(routeName));
+    const active = r === routeName || (r === 'people' && routeName === 'person') || (r === 'studies' && routeName === 'study') || (r === 'more' && ['settings', 'activity', 'trash', 'schedules', 'review'].includes(routeName));
     return h('a', { href: `#/${r}`, class: active ? 'active' : '', 'aria-current': active ? 'page' : null },
       h('span', { class: 'nav-icon', 'aria-hidden': 'true' }, icon), h('span', null, label),
-      r === 'review' && reviewCount ? h('span', { class: 'badge', 'aria-label': `${reviewCount} to review` }, reviewCount) : null);
+      r === 'more' && reviewCount ? h('span', { class: 'badge', 'aria-label': `${reviewCount} to review` }, reviewCount) : null);
   }));
   return [
     h('header', { class: 'topbar' }, h('div', { class: 'brand' }, h('span', { class: 'logo' }, 'AIA'), GROUP_NAME), nav),
@@ -48,8 +49,8 @@ function inputFocused() {
 }
 export function render(force = false) {
   if (!S.user || !S.me) return;
-  if (!force && (modalState.open || inputFocused())) { pendingRender = true; return; }
-  pendingRender = false;
+  if (!force && (modalState.open || inputFocused() || formState.dirty)) { pendingRender = true; return; }
+  pendingRender = false; formState.dirty = false;
   const { name, args } = parseRoute();
   const key = location.hash;
   const scroll = key === lastRouteKey ? window.scrollY : 0;
@@ -65,6 +66,7 @@ export function render(force = false) {
 }
 const scheduleRender = () => { clearTimeout(renderTimer); renderTimer = setTimeout(() => render(), 120); };
 modalState.onClose.push(() => pendingRender && scheduleRender());
+formState.onClean = () => pendingRender && scheduleRender();
 document.addEventListener('focusout', () => setTimeout(() => pendingRender && !inputFocused() && scheduleRender(), 50));
 window.addEventListener('hashchange', () => render(true));
 onChange(scheduleRender);

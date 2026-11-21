@@ -1,9 +1,9 @@
 import { h, card, empty, fmtLong, fmtDate, fmtDateTime, toast, confirmBox, drawQR, downloadFile, go } from '../ui.js';
 import {
-  S, todayKey, sundayByDate, semesterFor, liveSemesters, peopleById, setSundayStatus, openCheckinNow,
+  S, todayKey, sundayByDate, userName, semesterFor, liveSemesters, peopleById, setSundayStatus, openCheckinNow,
   resetCheckinWindow, newQrToken, addAttendance, removeAttendance,
 } from '../store.js';
-import { currentSundayKey, addDays, isSunday, buildWeekReport, fullName } from '../logic.js';
+import { currentSundayKey, addDays, isSunday, buildWeekReport, fullName, hasPlan } from '../logic.js';
 import { pickPerson, statTile, teamBars } from './common.js';
 
 export function checkinUrl(s) {
@@ -89,7 +89,12 @@ export function renderWeek(dateArg) {
       } }, '×')))) : empty('No one checked in yet.'),
     rep.byTeam.length ? [h('h3', null, 'By team'), teamBars(rep.byTeam)] : null);
 
-  return [head, h('div', { class: 'grid2' }, qrCard, attCard)];
+  const p = s.plan || {};
+  const planCard = s.status === 'nostudy' ? null : h('a', { class: 'card plan-strip', href: `#/study/${k}` },
+    h('div', { class: 'muted small' }, s.leaderEmail ? `Led by ${userName(s.leaderEmail)}` : 'No leader assigned yet'),
+    hasPlan(s) ? [h('strong', null, p.title || 'Untitled study'), p.scripture ? h('span', { class: 'muted' }, ` · ${p.scripture}`) : null] : h('span', null, 'No study plan yet — tap to add one'),
+    h('span', { class: 'plan-go' }, '›'));
+  return [head, planCard, h('div', { class: 'grid2' }, qrCard, attCard)];
 }
 
 function printQR(k, url) {

@@ -33,8 +33,14 @@ export function fmtDateTime(d) {
   return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+// Unsaved edits in a [data-form] block live updates until saved (any success toast) or the page changes.
+export const formState = { dirty: false, onClean: null };
+document.addEventListener('input', e => { if (e.target.closest && e.target.closest('[data-form]')) formState.dirty = true; });
+export function markClean() { if (formState.dirty) { formState.dirty = false; formState.onClean && formState.onClean(); } }
+
 let toastTimer;
 export function toast(msg, kind = 'ok') {
+  if (kind === 'ok') markClean();
   let t = document.getElementById('toast');
   if (!t) { t = h('div', { id: 'toast', role: 'status' }); document.body.append(t); }
   t.textContent = msg; t.className = `show ${kind}`;
@@ -48,6 +54,7 @@ export function modal(title, body, actions = [{ label: 'Close' }], opts = {}) {
   let closed = false;
   const close = () => {
     if (closed) return; closed = true;
+    if (box.querySelector('[data-form]')) markClean();
     back.remove(); modalState.open--;
     if (opts.onClose) opts.onClose();
     if (!modalState.open) modalState.onClose.forEach(f => f());

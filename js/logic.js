@@ -439,3 +439,42 @@ export function findTimes(people, { minSlots = 2, prefFrom = 8 * 60, prefTo = 23
   if (!best.length && n > 2) { best = runs(n - 1); level = 'allButOne'; }
   return { counts, free, best: onePerDay(best).slice(0, max), level, n };
 }
+
+// ---------- study plans ----------
+export const LINK_TYPES = ['Google Doc', 'Slides', 'PDF', 'Video', 'Image', 'Other'];
+export function guessLinkType(url) {
+  const u = (url || '').toLowerCase();
+  if (u.includes('docs.google.com/presentation') || u.includes('.ppt')) return 'Slides';
+  if (u.includes('docs.google.com/document') || u.includes('.doc') || u.includes('onedrive') || u.includes('sharepoint')) return 'Google Doc';
+  if (u.endsWith('.pdf') || u.includes('pdf')) return 'PDF';
+  if (u.includes('youtube') || u.includes('youtu.be') || u.includes('vimeo')) return 'Video';
+  if (/\.(png|jpe?g|gif|heic|webp)$/.test(u)) return 'Image';
+  return 'Other';
+}
+export function normalizeUrl(u) { u = (u || '').trim(); if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u; return u; }
+
+/** Fill unassigned Sundays with leaders in order, continuing from the last assigned leader. */
+export function rotationPlan(sundays, leaderEmails) {
+  if (!leaderEmails.length) return [];
+  const sorted = [...sundays].sort((a, b) => a.date < b.date ? -1 : 1);
+  let last = -1;
+  const out = [];
+  for (const s of sorted) {
+    if (s.status === 'nostudy') continue;
+    const i = leaderEmails.indexOf(s.leaderEmail);
+    if (s.leaderEmail) { if (i >= 0) last = i; continue; }
+    last = (last + 1) % leaderEmails.length;
+    out.push({ date: s.date, leaderEmail: leaderEmails[last] });
+  }
+  return out;
+}
+
+export function studyText(s, nameOf = e => e) {
+  const p = s.plan || {};
+  return [p.title, p.scripture, ...(p.questions || []), p.notes, nameOf(s.leaderEmail), ...(p.links || []).map(l => l.label)].filter(Boolean).join(' \n ').toLowerCase();
+}
+export function searchStudies(sundays, q, nameOf) {
+  const terms = (q || '').toLowerCase().split(/\s+/).filter(Boolean);
+  return sundays.filter(s => { const t = studyText(s, nameOf); return terms.every(x => t.includes(x)); });
+}
+export const hasPlan = s => !!(s.plan && (s.plan.title || s.plan.scripture || (s.plan.questions || []).length || s.plan.notes || (s.plan.links || []).length));

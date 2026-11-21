@@ -256,3 +256,23 @@ canvas.qr { display: block; width: 100%; max-width: 320px; height: auto; margin:
 .day-toggles { display: flex; gap: .3rem; flex-wrap: wrap; }
 .day-toggle { flex: 1 0 40px; min-height: 42px; border: 1px solid #d6cabe; background: #fff; border-radius: 8px; font: inherit; font-weight: 700; font-size: .85rem; cursor: pointer; color: var(--ink); }
 .day-toggle.on { background: var(--brown); color: #fff; border-color: var(--brown); }
+
+/* ---------- phase 4: studies ---------- */
+.grow { flex: 1; min-width: 0; }
+.study-list { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.study-row { display: flex; align-items: center; gap: .6rem; padding: .7rem .9rem; border-bottom: 1px solid var(--line); text-decoration: none; color: var(--ink); }
+.study-row:last-child { border-bottom: 0; }
+.study-row.nostudy { background: #faf8f5; }
+.study-main { flex: 1; min-width: 0; text-decoration: none; color: var(--ink); display: block; }
+.study-date { font-size: .78rem; font-weight: 700; color: var(--brown-2); text-transform: uppercase; letter-spacing: .03em; }
+.inline-select { width: auto; max-width: 46%; min-height: 38px; padding: .3rem .5rem; font-size: .88rem; }
+.plan-dl { display: grid; grid-template-columns: auto 1fr; gap: .3rem .9rem; margin: 0 0 .5rem; }
+.plan-dl dt { color: var(--muted); font-weight: 600; font-size: .85rem; }
+.plan-dl dd { margin: 0; }
+.q-list { padding-left: 1.3rem; } .q-list li { padding: .3rem 0; }
+.link-list { list-style: none; padding: 0; } .link-list li { padding: .35rem 0; }
+.link-list .tag { margin-left: 0; }
+.link-edit { display: grid; grid-template-columns: 1fr 1.4fr 8rem 40px; gap: .4rem; align-items: center; margin-bottom: .5rem; }
+@media (max-width: 760px) { .link-edit { grid-template-columns: 1fr 40px; } .link-edit > :nth-child(2), .link-edit > :nth-child(3) { grid-column: 1; } .link-edit > :nth-child(4) { grid-row: 1; grid-column: 2; } }
+.plan-strip { display: block; position: relative; text-decoration: none; color: var(--ink); padding-right: 2.2rem; }
+.plan-go { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); font-size: 1.6rem; color: var(--muted); }

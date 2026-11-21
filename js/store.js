@@ -344,6 +344,50 @@ export async function purgeException(x) {
   log('purge', `Permanently deleted one-time change "${x.label}"`, { kind: 'exception', refId: x.id, snapshot: JSON.parse(JSON.stringify(x)) });
 }
 
+// ---------- study plans ----------
+const planOf = s => ({ leaderEmail: s?.leaderEmail || '', plan: s?.plan || {} });
+/** Save a plan. The previous version is kept in sundays/{date}/history first. */
+export async function savePlan(k, plan, leaderEmail) {
+  const s = sundayByDate(k);
+  const ops = [];
+  const before = planOf(s);
+  if (before.leaderEmail || Object.keys(before.plan).length)
+    ops.push({ type: 'set', path: `sundays/${k}/history/${fb.newId('h')}`, data: { ...before, savedAt: NOW, replacedBy: S.user.email, prevUpdatedBy: s?.planUpdatedBy || '', prevUpdatedAt: s?.planUpdatedAt || null } });
+  ops.push({ type: 'update', path: `sundays/${k}`, data: { plan, leaderEmail: leaderEmail || '', planUpdatedAt: NOW, planUpdatedBy: S.user.email, planSample: DELETE } });
+  await fb.batchWrite(ops);
+  log('plan', `Updated the study plan for ${k}${plan.title ? ` (“${plan.title}”)` : ''}`, { kind: 'plan', refId: k, changes: diff(before.plan, plan) });
+}
+export async function setLeader(k, email) {
+  const s = sundayByDate(k);
+  await fb.updateOne(`sundays/${k}`, { leaderEmail: email || '' });
+  log('plan', `${email ? `Assigned ${userName(email)} to lead` : 'Unassigned the leader for'} ${k}`, { kind: 'plan', refId: k, changes: { leader: { from: userName(s?.leaderEmail), to: userName(email) } } });
+}
+export async function applyRotation(assignments) {
+  await fb.batchWrite(assignments.map(a => ({ type: 'update', path: `sundays/${a.date}`, data: { leaderEmail: a.leaderEmail } })));
+  log('plan', `Auto-assigned leaders to ${assignments.length} Sundays`, { kind: 'plan' });
+}
+export const getHistory = k => fb.getMany(`sundays/${k}/history`, { orderBy: 'savedAt', desc: true, limit: 50 });
+export async function restoreVersion(k, v) {
+  await savePlan(k, v.plan || {}, v.leaderEmail || '');
+  log('restore', `Restored an earlier version of the ${k} study plan`, { kind: 'plan', refId: k });
+}
+let commentWatch = { k: null, unsub: null };
+export const comments = { k: null, list: [] };
+export function watchComments(k) {
+  if (commentWatch.k === k) return;
+  commentWatch.unsub?.();
+  comments.k = k; comments.list = [];
+  commentWatch = { k, unsub: fb.watch(`sundays/${k}/comments`, {}, d => { comments.list = d.sort((a, b) => (a.at || 0) - (b.at || 0)); emit(); }) };
+}
+export async function addComment(k, text) {
+  await fb.addOne(`sundays/${k}/comments`, { text: text.trim(), by: S.user.email, byName: S.user.name || S.user.email, at: NOW });
+  log('comment', `Commented on the ${k} study plan`, { kind: 'plan', refId: k });
+}
+export async function deleteComment(k, c) {
+  await fb.removeOne(`sundays/${k}/comments/${c.id}`);
+  log('delete', `Deleted a comment on the ${k} study plan`, { kind: 'plan', refId: k, snapshot: { text: c.text, by: c.by } });
+}
+
 // ---------- attendance ----------
 export async function addAttendance(k, p) {
   await fb.updateOne(`sundays/${k}`, { [`attendees.${p.id}`]: { teamId: p.teamId || '', teamOther: p.teamOther || '', classYear: p.classYear || '', source: 'manual', addedBy: S.user.email, at: NOW } });
